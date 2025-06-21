@@ -1,0 +1,26 @@
+body {
+  font-family: Arial, sans-serif;
+  margin: 1em;
+}
+header button {
+  margin-right: .5em;
+  padding: .4em 1em;
+}
+#indicator {
+  margin: 1em 0;
+  font-weight: bold;
+}
+#outputTable {
+  width: 100%;
+  border-collapse: collapse;
+}
+#outputTable th,
+#outputTable td {
+  border: 1px solid #ccc;
+  padding: .3em .6em;
+  font-size: .85em;
+}
+#outputTable th {
+  background: #f0f0f0;
+  text-align: left;
+}
