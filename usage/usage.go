@@ -14,26 +14,24 @@ import (
 	"golang.org/x/text/transform"
 )
 
-// UsageRecord は USAGE CSV の各レコード情報を保持します。
+// UsageRecord は USAGE CSV の各レコード情報を保持します
 type UsageRecord struct {
-	UsageDate        string `json:"usageDate"`        // 使用日
-	UsageYjCode      string `json:"usageYjCode"`      // YJコード（以前の UsageCode）
-	UsageJanCode     string `json:"usageJanCode"`     // JANコード（以前の JANCode）
-	UsageProductName string `json:"usageProductName"` // 商品名（以前の ProductName）
-	UsageAmount      string `json:"usageAmount"`      // 数量／金額（以前の QuantityOrAmount）
-	UsageUnit        string `json:"usageUnit"`        // 単位コード（以前の Unit）
-	UsageUnitName    string `json:"usageUnitName"`    // 単位名称（以前の UnitName → TANI マスターから取得）
+	UsageDate        string `json:"usageDate"`
+	UsageYjCode      string `json:"usageYjCode"`
+	UsageJanCode     string `json:"usageJanCode"`
+	UsageProductName string `json:"usageProductName"`
+	UsageAmount      string `json:"usageAmount"`
+	UsageUnit        string `json:"usageUnit"`
+	UsageUnitName    string `json:"usageUnitName"`
 }
 
-// taniMap は TANI マスターのデータを保持するグローバル変数です。
 var taniMap map[string]string
 
-// loadTaniMap は、所定のパスから TANI.CSV を読み込み、 taniMap にセットします。
+// loadTaniMap は所定のパスの TANI.CSV を読み込み、taniMap にセットします
 func loadTaniMap() {
 	if taniMap != nil {
 		return
 	}
-	// TANI.CSV のパス。各環境に合わせて修正してください。
 	f, err := os.Open("C:\\Dev\\YAMATO\\SOU\\TANI.CSV")
 	if err != nil {
 		log.Printf("TANIファイルオープンエラー: %v", err)
@@ -50,16 +48,16 @@ func loadTaniMap() {
 	taniMap = tMap
 }
 
-// ParseUsageFile は、USAGE CSV をパースして動作情報を UsageRecord として返します。
-// USAGE CSV は Shift‑JIS でエンコードされているため変換を適用し、最初のヘッダー行をスキップして各行を処理します。
+// ParseUsageFile は、USAGE CSV を Shift‑JIS から UTF‑8 に変換しながらパースして UsageRecord のスライスを返します。
+// 各レコードの全データを抽出し、同時に MA0 への連携（全データをそのまま送る）を行います。
 func ParseUsageFile(r io.Reader) ([]UsageRecord, error) {
 	loadTaniMap()
-
 	var records []UsageRecord
 	scanner := bufio.NewScanner(transform.NewReader(r, japanese.ShiftJIS.NewDecoder()))
 	headerSkipped := false
 	for scanner.Scan() {
 		line := scanner.Text()
+
 		// ヘッダー行（"UsageDate" を含む場合）をスキップ
 		if !headerSkipped {
 			if strings.Contains(line, "UsageDate") {
@@ -68,7 +66,8 @@ func ParseUsageFile(r io.Reader) ([]UsageRecord, error) {
 			}
 			headerSkipped = true
 		}
-		// カンマ区切りで分割
+
+		// カンマ区切りで各フィールドを取得
 		fields := strings.Split(line, ",")
 		if len(fields) < 6 {
 			continue
@@ -77,8 +76,7 @@ func ParseUsageFile(r io.Reader) ([]UsageRecord, error) {
 		for i, f := range fields {
 			fields[i] = strings.Trim(f, "\" ")
 		}
-		// 仮のフィールド配置（実際は仕様に合わせて調整してください）：
-		// fields[0]: 使用日, [1]: YJコード, [2]: JANコード, [3]: 商品名, [4]: 数量／金額, [5]: 単位コード
+
 		ur := UsageRecord{
 			UsageDate:        fields[0],
 			UsageYjCode:      fields[1],
@@ -87,20 +85,27 @@ func ParseUsageFile(r io.Reader) ([]UsageRecord, error) {
 			UsageAmount:      fields[4],
 			UsageUnit:        fields[5],
 		}
-		// TANI マスターから、単位コードに対応する単位名称を取得
+		// TANI マスターより単位コードに対応する単位名称を取得
 		if name, ok := taniMap[ur.UsageUnit]; ok {
 			ur.UsageUnitName = name
 		} else {
 			ur.UsageUnitName = ur.UsageUnit
 		}
+
 		records = append(records, ur)
 
-		// MA0 照合処理：UsageRecord の JANコード（UsageJanCode）をキーとしてチェック
-		_, created, err := ma0.CheckOrCreateMA0(ur.UsageJanCode)
-		if err != nil {
+		// ここで UsageRecord の全データをスライスにまとめ、ma0 へそのまま送ります
+		recordData := []string{
+			ur.UsageDate,        // 0: 使用日
+			ur.UsageYjCode,      // 1: YJコード
+			ur.UsageJanCode,     // 2: JANコード ← MA0 のキーとなります
+			ur.UsageProductName, // 3: 商品名
+			ur.UsageAmount,      // 4: 数量／金額
+			ur.UsageUnit,        // 5: 単位コード
+			ur.UsageUnitName,    // 6: 単位名称
+		}
+		if err := ma0.ProcessMA0Record(recordData); err != nil {
 			log.Printf("[USAGE] MA0照合エラー (JAN=%q): %v", ur.UsageJanCode, err)
-		} else if created {
-			log.Printf("[USAGE] 新規MA0登録: %q", ur.UsageJanCode)
 		}
 	}
 	if err := scanner.Err(); err != nil {

@@ -1,3 +1,4 @@
+// File: main.go
 package main
 
 import (
@@ -12,23 +13,84 @@ import (
 	"runtime"
 	"strings"
 
-	_ "github.com/mattn/go-sqlite3"
+	"golang.org/x/text/encoding/japanese"
+	"golang.org/x/text/transform"
 
 	"YAMATO/dat"
 	"YAMATO/ma0"
 	"YAMATO/usage"
+
+	_ "github.com/mattn/go-sqlite3"
 )
 
-var db *sql.DB
+// loadCSV は Shift-JIS → UTF-8 変換しつつ CSV を INSERT します。
+// skipHeader=true のときだけ最初の１行をスキップします。
+func loadCSV(db *sql.DB, filePath, table string, cols int, skipHeader bool) error {
+	f, err := os.Open(filePath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
 
-// uploadDatHandler は既存のまま
+	rd := csv.NewReader(transform.NewReader(f, japanese.ShiftJIS.NewDecoder()))
+	rd.LazyQuotes = true
+	rd.FieldsPerRecord = -1
+
+	if skipHeader {
+		if _, err := rd.Read(); err != nil {
+			return err
+		}
+	}
+
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err != nil {
+			tx.Rollback()
+		}
+	}()
+
+	ph := make([]string, cols)
+	for i := range ph {
+		ph[i] = "?"
+	}
+	stmt, err := tx.Prepare(
+		"INSERT OR REPLACE INTO " + table +
+			" VALUES(" + strings.Join(ph, ",") + ")",
+	)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	for {
+		rec, err := rd.Read()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
+		args := make([]interface{}, len(rec))
+		for i, v := range rec {
+			args[i] = v
+		}
+		if _, err := stmt.Exec(args...); err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
+}
+
 func uploadDatHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	err := r.ParseMultipartForm(10 << 20)
-	if err != nil {
+	if err := r.ParseMultipartForm(10 << 20); err != nil {
 		http.Error(w, "Error parsing form: "+err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -38,45 +100,43 @@ func uploadDatHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var allRecords []dat.DATRecord
-	totalCount, ma0CreatedCount, duplicateCount := 0, 0, 0
-	for _, fileHeader := range files {
-		file, err := fileHeader.Open()
+	var all []dat.DATRecord
+	total, created, dup := 0, 0, 0
+	for _, fh := range files {
+		file, err := fh.Open()
 		if err != nil {
-			log.Println("Error opening DAT file:", err)
+			log.Println("open DAT error:", err)
 			continue
 		}
 		defer file.Close()
 
-		records, tc, mc, dc, err := dat.ParseDATFile(file)
+		recs, tc, mc, dc, err := dat.ParseDATFile(file)
 		if err != nil {
-			log.Println("Error parsing DAT file:", err)
+			log.Println("parse DAT error:", err)
 			continue
 		}
-		totalCount += tc
-		ma0CreatedCount += mc
-		duplicateCount += dc
-		allRecords = append(allRecords, records...)
+		total += tc
+		created += mc
+		dup += dc
+		all = append(all, recs...)
 	}
 
 	resp := map[string]interface{}{
-		"DATReadCount":    totalCount,
-		"MA0CreatedCount": ma0CreatedCount,
-		"DuplicateCount":  duplicateCount,
-		"DATRecords":      allRecords,
+		"DATReadCount":    total,
+		"MA0CreatedCount": created,
+		"DuplicateCount":  dup,
+		"DATRecords":      all,
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
 }
 
-// uploadUsageHandler は既存のまま
 func uploadUsageHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	err := r.ParseMultipartForm(10 << 20)
-	if err != nil {
+	if err := r.ParseMultipartForm(10 << 20); err != nil {
 		http.Error(w, "Error parsing form: "+err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -85,34 +145,35 @@ func uploadUsageHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "No USAGE file uploaded", http.StatusBadRequest)
 		return
 	}
-	var allRecords []usage.UsageRecord
-	for _, fileHeader := range files {
-		file, err := fileHeader.Open()
+
+	var all []usage.UsageRecord
+	for _, fh := range files {
+		file, err := fh.Open()
 		if err != nil {
-			log.Println("Error opening USAGE file:", err)
+			log.Println("open USAGE error:", err)
 			continue
 		}
 		defer file.Close()
-		records, err := usage.ParseUsageFile(file)
+
+		recs, err := usage.ParseUsageFile(file)
 		if err != nil {
-			log.Println("Error parsing USAGE file:", err)
+			log.Println("parse USAGE error:", err)
 			continue
 		}
-		allRecords = append(allRecords, records...)
+		all = append(all, recs...)
 	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"USAGERecords": allRecords,
-		"TotalRecords": len(allRecords),
+		"USAGERecords": all,
+		"TotalRecords": len(all),
 	})
 }
 
-// viewMA0Handler は既存のまま
 func viewMA0Handler(w http.ResponseWriter, r *http.Request) {
 	ma0.ViewMA0Handler(w, r)
 }
 
-// autoLaunchBrowser は既存のまま
 func autoLaunchBrowser(url string) {
 	var cmd string
 	var args []string
@@ -128,93 +189,36 @@ func autoLaunchBrowser(url string) {
 		args = []string{url}
 	}
 	if err := exec.Command(cmd, args...).Start(); err != nil {
-		log.Printf("Browser auto-launch failed: %v", err)
+		log.Printf("browser start failed: %v", err)
 	}
-}
-
-// loadCSV は起動時の JCHMAS/JANCODE 一括取り込み用
-func loadCSV(db *sql.DB, filePath, table string, cols int) error {
-	f, err := os.Open(filePath)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	r := csv.NewReader(f)
-	// ヘッダー行をスキップ
-	if _, err := r.Read(); err != nil {
-		return err
-	}
-
-	tx, err := db.Begin()
-	if err != nil {
-		return err
-	}
-	// プレースホルダーを作成
-	ph := make([]string, cols)
-	for i := range ph {
-		ph[i] = "?"
-	}
-	stmt, err := tx.Prepare(
-		"INSERT OR REPLACE INTO " + table +
-			" VALUES(" + strings.Join(ph, ",") + ")",
-	)
-	if err != nil {
-		return err
-	}
-	defer stmt.Close()
-
-	for {
-		rec, err := r.Read()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			tx.Rollback()
-			return err
-		}
-		args := make([]interface{}, len(rec))
-		for i, v := range rec {
-			args[i] = v
-		}
-		if _, err := stmt.Exec(args...); err != nil {
-			tx.Rollback()
-			return err
-		}
-	}
-	return tx.Commit()
 }
 
 func main() {
-	var err error
-
-	// ① DB を開く
-	db, err = sql.Open("sqlite3", "yamato.db")
+	db, err := sql.Open("sqlite3", "yamato.db")
 	if err != nil {
 		log.Fatalf("DB open error: %v", err)
 	}
 	defer db.Close()
 
-	// ② schema.sql を読み込んでテーブル定義を反映（IF NOT EXISTS を schema.sql に記述）
-	b, err := os.ReadFile("schema.sql")
+	ma0.DB = db
+
+	schema, err := os.ReadFile("schema.sql")
 	if err != nil {
-		log.Fatalf("Failed to read schema.sql: %v", err)
+		log.Fatalf("read schema.sql error: %v", err)
 	}
-	if _, err := db.Exec(string(b)); err != nil {
-		log.Fatalf("Failed to exec schema.sql: %v", err)
+	if _, err := db.Exec(string(schema)); err != nil {
+		log.Fatalf("exec schema.sql error: %v", err)
 	}
 
-	// ③ SOUフォルダの JCHMAS/JANCODE CSV を毎回取り込み
-	jchmasPath := `C:\Dev\YAMATO\SOU\JCSHMS.CSV`
+	jcshmsPath := `C:\Dev\YAMATO\SOU\JCSHMS.CSV`
 	jancodePath := `C:\Dev\YAMATO\SOU\JANCODE.CSV`
-	if err := loadCSV(db, jchmasPath, "jchmas", 125); err != nil {
-		log.Fatalf("failed to load %s: %v", jchmasPath, err)
+	if err := loadCSV(db, jcshmsPath, "jcshms", 125, false); err != nil {
+		log.Fatalf("load JCSHMS failed: %v", err)
 	}
-	if err := loadCSV(db, jancodePath, "jancode", 30); err != nil {
-		log.Fatalf("failed to load %s: %v", jancodePath, err)
+	if err := loadCSV(db, jancodePath, "jancode", 30, true); err != nil {
+		log.Fatalf("load JANCODE failed: %v", err)
 	}
 
-	// ④ HTTP サーバーの既存処理
 	fs := http.FileServer(http.Dir("./static"))
 	http.Handle("/", fs)
 	http.HandleFunc("/uploadDat", uploadDatHandler)
@@ -222,8 +226,6 @@ func main() {
 	http.HandleFunc("/viewMA0", viewMA0Handler)
 
 	go autoLaunchBrowser("http://localhost:8080")
-	log.Println("Server starting on port :8080")
-	if err := http.ListenAndServe(":8080", nil); err != nil {
-		log.Fatal("ListenAndServe:", err)
-	}
+	log.Println("Server listening on :8080")
+	log.Fatal(http.ListenAndServe(":8080", nil))
 }

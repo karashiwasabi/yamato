@@ -1,301 +1,329 @@
+// File: jchms/jchms.go
 package jchms
 
 import (
-	"encoding/csv"
-	"io"
-	"log"
+	"database/sql"
+	"fmt"
+	"reflect"
 )
 
-// JCFields は、JCHMAS CSVから取り出す JC 領域の各フィールドを保持する構造体です。
-// ここでは例として JC000, JC001, JC124 を定義していますが、必要に応じて他のフィールドも追加してください。
+// JCFields holds 125 columns from the JCHMAS CSV.
+// CSV取り込み時、テーブル jchmas の列は「JC000JanCode, JC001, JC002, …, JC124」として保存される前提です。
 type JCFields struct {
-	JC000 string
-	JC001 string
-	JC002 string
-	JC003 string
-	JC004 string
-	JC005 string
-	JC006 string
-	JC007 string
-	JC008 string
-	JC009 string
-	JC010 string
-	JC011 string
-	JC012 string
-	JC013 string
-	JC014 string
-	JC015 string
-	JC016 string
-	JC017 string
-	JC018 string
-	JC019 string
-	JC020 string
-	JC021 string
-	JC022 string
-	JC023 string
-	JC024 string
-	JC025 string
-	JC026 string
-	JC027 string
-	JC028 string
-	JC029 string
-	JC030 string
-	JC031 string
-	JC032 string
-	JC033 string
-	JC034 string
-	JC035 string
-	JC036 string
-	JC037 string
-	JC038 string
-	JC039 string
-	JC040 string
-	JC041 string
-	JC042 string
-	JC043 string
-	JC044 string
-	JC045 string
-	JC046 string
-	JC047 string
-	JC048 string
-	JC049 string
-	JC050 string
-	JC051 string
-	JC052 string
-	JC053 string
-	JC054 string
-	JC055 string
-	JC056 string
-	JC057 string
-	JC058 string
-	JC059 string
-	JC060 string
-	JC061 string
-	JC062 string
-	JC063 string
-	JC064 string
-	JC065 string
-	JC066 string
-	JC067 string
-	JC068 string
-	JC069 string
-	JC070 string
-	JC071 string
-	JC072 string
-	JC073 string
-	JC074 string
-	JC075 string
-	JC076 string
-	JC077 string
-	JC078 string
-	JC079 string
-	JC080 string
-	JC081 string
-	JC082 string
-	JC083 string
-	JC084 string
-	JC085 string
-	JC086 string
-	JC087 string
-	JC088 string
-	JC089 string
-	JC090 string
-	JC091 string
-	JC092 string
-	JC093 string
-	JC094 string
-	JC095 string
-	JC096 string
-	JC097 string
-	JC098 string
-	JC099 string
-	JC100 string
-	JC101 string
-	JC102 string
-	JC103 string
-	JC104 string
-	JC105 string
-	JC106 string
-	JC107 string
-	JC108 string
-	JC109 string
-	JC110 string
-	JC111 string
-	JC112 string
-	JC113 string
-	JC114 string
-	JC115 string
-	JC116 string
-	JC117 string
-	JC118 string
-	JC119 string
-	JC120 string
-	JC121 string
-	JC122 string
-	JC123 string
-	JC124 string
+	JC000JanCode                           string
+	JC001JanCodeShikibetsuKubun            string
+	JC002KyuuJanCode                       string
+	JC003TouitsuShouhinCode                string
+	JC004YakkaKijunShuusaiIyakuhinCode     string
+	JC005KyuuYakkaKijunShuusaiIyakuhinCode string
+	JC006HOTBangou                         string
+	JC007ReseputoCode1                     string
+	JC008ReseputoCode2                     string
+	JC009YJCode                            string
+	JC010YakkouBunruiCode                  string
+	JC011YakkouBunruiMei                   string
+	JC012ShiyouKubunCode                   string
+	JC013ShiyouKubunMeishou                string
+	JC014NihonHyoujunShouhinBunruiBangou   string
+	JC015ZaikeiCode                        string
+	JC016ZaikeiKigou                       string
+	JC017ZaikeiMeishou                     string
+	JC018ShouhinMei                        string
+	JC019HankakuShouhinMei                 string
+	JC020KikakuYouryou                     string
+	JC021HankakuKikakuYouryou              string
+	JC022ShouhinMeiKanaSortYou             string
+	JC023ShouhinMeiKanpouYouKigou          string
+	JC024IppanMeishou                      string
+	JC025YakkaShuusaiMeishou               string
+	JC026ReseYouIyakuhinMei                string
+	JC027KikakuTaniMeishou                 string
+	JC028KikakuTaniKigou                   string
+	JC029HanbaiMotoCode                    string
+	JC030HanbaiMotoMei                     string
+	JC031HanbaiMotoMeiKana                 string
+	JC032HanbaiMotoMeiRyakuMei             string
+	JC033SeizouMotoYunyuuMotoCode          string
+	JC034SeizouMotoYunyuuMotoMei           string
+	JC035SeizouMotoYunyuuMotoMeiKana       string
+	JC036SeizouMotoYunyuuMotoMeiRyakuMei   string
+	JC037HousouKeitai                      string
+	JC038HousouTaniSuuchi                  string
+	JC039HousouTaniTani                    string
+	JC040HousouSuuryouSuuchi               string
+	JC041HousouSuuryouTani                 string
+	JC042HousouIrisuuSuuchi                string
+	JC043HousouIrisuuTani                  string
+	JC044HousouSouryouSuuchi               string
+	JC045HousouSouryouTani                 string
+	JC046HousouYouryouSuuchi               string
+	JC047HousouYouryouTani                 string
+	JC048HousouYakkaKeisuu                 string
+	JC049GenTaniYakka                      string
+	JC050GenHousouYakka                    string
+	JC051KyuuTaniYakka                     string
+	JC052KyuuHousouYakka                   string
+	JC053KokuchiTaniYakka                  string
+	JC054KokuchiHousouYakka                string
+	JC055YakkaKaiteiNengappi               string
+	JC056YakkaShuusaiNengappi              string
+	JC057HanbaiKaishiNengappi              string
+	JC058KeikaSochiNengappi                string
+	JC059HatsubaiChuushiNengappi           string
+	JC060SeizouChuushiNengappi             string
+	JC061Doyaku                            string
+	JC062Gekiyaku                          string
+	JC063Mayaku                            string
+	JC064Kouseishinyaku                    string
+	JC065Kakuseizai                        string
+	JC066KakuseizaiGenryou                 string
+	JC067ShuukanseiIyakuhin                string
+	JC068ShiteiIyakuhinKyuuKiseiKubun      string
+	JC069YoushijiIyakuhinKyuuKiseiKubun    string
+	JC070KetsuekiSeizai                    string
+	JC071NihonYakkyokuhou                  string
+	JC072YuukouKikan                       string
+	JC073ShiyouKigen                       string
+	JC074SeibutsuYuraiSeihin               string
+	JC075Kouhatsuhin                       string
+	JC076YakkaKijunShuusaiKubun            string
+	JC077KichouGimuKubun                   string
+	JC078ShouhinKubun                      string
+	JC079ShohousenIyakuhin                 string
+	JC080ChuushiRiyuuKubun                 string
+	JC081MishiyouKyuuRyuutsuuKanrihin      string
+	JC082MentenanceKubun                   string
+	JC083KouhatsuhinNoAruSenpatsuhinKubun  string
+	JC084AuthorizedGeneric                 string
+	JC085Biosimilar                        string
+	JC086HighRiskYaku                      string
+	JC087Kuuran1                           string
+	JC088Kuuran2                           string
+	JC089Shitsuon                          string
+	JC090Reisho                            string
+	JC091Reizou                            string
+	JC092Reitou                            string
+	JC093Ansho                             string
+	JC094Shakou                            string
+	JC095KimitsuYouki                      string
+	JC096MippuuYouki                       string
+	JC097Kikenbutsu                        string
+	JC098OndoJougen                        string
+	JC099OndoKagen                         string
+	JC100SonotaHokanjouNoChui              string
+	JC101KonpouJuuryouSizeJouhou           string
+	JC102KonpouTateSizeJouhou              string
+	JC103KonpouYokoSizeJouhou              string
+	JC104KonpouTakasaSizeJouhou            string
+	JC105KonpouTaiseiSizeJouhou            string
+	JC106ChuubakoJuuryouSizeJouhou         string
+	JC107ChuubakoTateSizeJouhou            string
+	JC108ChuubakoYokoSizeJouhou            string
+	JC109ChuubakoTakasaSizeJouhou          string
+	JC110ChuubakoTaiseiSizeJouhou          string
+	JC111KousouJuuryouSizeJouhou           string
+	JC112KousouTateSizeJouhou              string
+	JC113KousouYokoSizeJouhou              string
+	JC114KousouTakasaSizeJouhou            string
+	JC115KousouTaiseiSizeJouhou            string
+	JC116KonpouTaniSizeJouhou              string
+	JC117HacchuuTaniSizeJouhou             string
+	JC118KoushinKubun                      string
+	JC119TourokuNengappi                   string
+	JC120KoushinNengappi                   string
+	JC121ChouzaiHousouTaniCode             string
+	JC122HanbaiHousouTaniCode              string
+	JC123IppanMeiKana                      string
+	JC124SaishouYakkaKansanKeisuu          string
 }
 
-// JCHMASRecord は、JCHMAS（旧JCHMS）CSVの1行分を表します。
-// キーはフィールド0（JANコード）とし、JC領域の情報を構造体として保持します。
+// JCHMASRecord represents one record in table jchmas.
 type JCHMASRecord struct {
-	JANCode string   // CSV のインデックス0 (JANコード)
-	JC      JCFields // JC 領域の情報
+	// JANCode は、SELECT 文で「JC000JanCode AS JC000」により取得された値です。
+	JC000JanCode string
+	// JC は、CSVの125フィールドを保持します。
+	JC JCFields
 }
 
-// ParseJCHMAS は、入力の io.Reader から CSV データを読み込み、
-// 各行を JCHMASRecord のスライスに変換して返します。
-// CSV はヘッダーなしで、各行は少なくとも 125 フィールド（0〜124）を持つことが前提です。
-func ParseJCHMAS(r io.Reader) ([]JCHMASRecord, error) {
-	reader := csv.NewReader(r)
-	rows, err := reader.ReadAll()
+// QueryJCHMASRecordsByJan queries the jchmas table for records matching the JAN code.
+// SELECT 句では、列「JC000JanCode」をエイリアス「JC000」として取得します。
+func QueryJCHMASRecordsByJan(db *sql.DB, jan string) ([]JCHMASRecord, error) {
+	query := `
+        SELECT 
+JC000JanCode,
+JC001JanCodeShikibetsuKubun,
+JC002KyuuJanCode,
+JC003TouitsuShouhinCode,
+JC004YakkaKijunShuusaiIyakuhinCode,
+JC005KyuuYakkaKijunShuusaiIyakuhinCode,
+JC006HOTBangou,
+JC007ReseputoCode1,
+JC008ReseputoCode2,
+JC009YJCode,
+JC010YakkouBunruiCode,
+JC011YakkouBunruiMei,
+JC012ShiyouKubunCode,
+JC013ShiyouKubunMeishou,
+JC014NihonHyoujunShouhinBunruiBangou,
+JC015ZaikeiCode,
+JC016ZaikeiKigou,
+JC017ZaikeiMeishou,
+JC018ShouhinMei,
+JC019HankakuShouhinMei,
+JC020KikakuYouryou,
+JC021HankakuKikakuYouryou,
+JC022ShouhinMeiKanaSortYou,
+JC023ShouhinMeiKanpouYouKigou,
+JC024IppanMeishou,
+JC025YakkaShuusaiMeishou,
+JC026ReseYouIyakuhinMei,
+JC027KikakuTaniMeishou,
+JC028KikakuTaniKigou,
+JC029HanbaiMotoCode,
+JC030HanbaiMotoMei,
+JC031HanbaiMotoMeiKana,
+JC032HanbaiMotoMeiRyakuMei,
+JC033SeizouMotoYunyuuMotoCode,
+JC034SeizouMotoYunyuuMotoMei,
+JC035SeizouMotoYunyuuMotoMeiKana,
+JC036SeizouMotoYunyuuMotoMeiRyakuMei,
+JC037HousouKeitai,
+JC038HousouTaniSuuchi,
+JC039HousouTaniTani,
+JC040HousouSuuryouSuuchi,
+JC041HousouSuuryouTani,
+JC042HousouIrisuuSuuchi,
+JC043HousouIrisuuTani,
+JC044HousouSouryouSuuchi,
+JC045HousouSouryouTani,
+JC046HousouYouryouSuuchi,
+JC047HousouYouryouTani,
+JC048HousouYakkaKeisuu,
+JC049GenTaniYakka,
+JC050GenHousouYakka,
+JC051KyuuTaniYakka,
+JC052KyuuHousouYakka,
+JC053KokuchiTaniYakka,
+JC054KokuchiHousouYakka,
+JC055YakkaKaiteiNengappi,
+JC056YakkaShuusaiNengappi,
+JC057HanbaiKaishiNengappi,
+JC058KeikaSochiNengappi,
+JC059HatsubaiChuushiNengappi,
+JC060SeizouChuushiNengappi,
+JC061Doyaku,
+JC062Gekiyaku,
+JC063Mayaku,
+JC064Kouseishinyaku,
+JC065Kakuseizai,
+JC066KakuseizaiGenryou,
+JC067ShuukanseiIyakuhin,
+JC068ShiteiIyakuhinKyuuKiseiKubun,
+JC069YoushijiIyakuhinKyuuKiseiKubun,
+JC070KetsuekiSeizai,
+JC071NihonYakkyokuhou,
+JC072YuukouKikan,
+JC073ShiyouKigen,
+JC074SeibutsuYuraiSeihin,
+JC075Kouhatsuhin,
+JC076YakkaKijunShuusaiKubun,
+JC077KichouGimuKubun,
+JC078ShouhinKubun,
+JC079ShohousenIyakuhin,
+JC080ChuushiRiyuuKubun,
+JC081MishiyouKyuuRyuutsuuKanrihin,
+JC082MentenanceKubun,
+JC083KouhatsuhinNoAruSenpatsuhinKubun,
+JC084AuthorizedGeneric,
+JC085Biosimilar,
+JC086HighRiskYaku,
+JC087Kuuran1,
+JC088Kuuran2,
+JC089Shitsuon,
+JC090Reisho,
+JC091Reizou,
+JC092Reitou,
+JC093Ansho,
+JC094Shakou,
+JC095KimitsuYouki,
+JC096MippuuYouki,
+JC097Kikenbutsu,
+JC098OndoJougen,
+JC099OndoKagen,
+JC100SonotaHokanjouNoChui,
+JC101KonpouJuuryouSizeJouhou,
+JC102KonpouTateSizeJouhou,
+JC103KonpouYokoSizeJouhou,
+JC104KonpouTakasaSizeJouhou,
+JC105KonpouTaiseiSizeJouhou,
+JC106ChuubakoJuuryouSizeJouhou,
+JC107ChuubakoTateSizeJouhou,
+JC108ChuubakoYokoSizeJouhou,
+JC109ChuubakoTakasaSizeJouhou,
+JC110ChuubakoTaiseiSizeJouhou,
+JC111KousouJuuryouSizeJouhou,
+JC112KousouTateSizeJouhou,
+JC113KousouYokoSizeJouhou,
+JC114KousouTakasaSizeJouhou,
+JC115KousouTaiseiSizeJouhou,
+JC116KonpouTaniSizeJouhou,
+JC117HacchuuTaniSizeJouhou,
+JC118KoushinKubun,
+JC119TourokuNengappi,
+JC120KoushinNengappi,
+JC121ChouzaiHousouTaniCode,
+JC122HanbaiHousouTaniCode,
+JC123IppanMeiKana,
+JC124SaishouYakkaKansanKeisuu
+        FROM jchmas
+        WHERE JC000JanCode = ?
+    `
+	rows, err := db.Query(query, jan)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("jchmas query error: %v", err)
 	}
+	defer rows.Close()
 
+	const colsCount = 125
 	var records []JCHMASRecord
-	for i, row := range rows {
-		// 行のフィールド数が125未満の場合は、警告を出してその行をスキップ
-		if len(row) < 125 {
-			log.Printf("Row %d: insufficient fields (%d)", i+1, len(row))
-			continue
+	for rows.Next() {
+		columns := make([]interface{}, colsCount)
+		columnPtrs := make([]interface{}, colsCount)
+		for i := 0; i < colsCount; i++ {
+			columnPtrs[i] = &columns[i]
+		}
+		if err := rows.Scan(columnPtrs...); err != nil {
+			return nil, fmt.Errorf("jchmas scan error: %v", err)
 		}
 
-		// JC領域のデータを構造体に格納
-		jc := JCFields{
-			JC000: row[0],
-			JC001: row[1],
-			JC002: row[2],
-			JC003: row[3],
-			JC004: row[4],
-			JC005: row[5],
-			JC006: row[6],
-			JC007: row[7],
-			JC008: row[8],
-			JC009: row[9],
-			JC010: row[10],
-			JC011: row[11],
-			JC012: row[12],
-			JC013: row[13],
-			JC014: row[14],
-			JC015: row[15],
-			JC016: row[16],
-			JC017: row[17],
-			JC018: row[18],
-			JC019: row[19],
-			JC020: row[20],
-			JC021: row[21],
-			JC022: row[22],
-			JC023: row[23],
-			JC024: row[24],
-			JC025: row[25],
-			JC026: row[26],
-			JC027: row[27],
-			JC028: row[28],
-			JC029: row[29],
-			JC030: row[30],
-			JC031: row[31],
-			JC032: row[32],
-			JC033: row[33],
-			JC034: row[34],
-			JC035: row[35],
-			JC036: row[36],
-			JC037: row[37],
-			JC038: row[38],
-			JC039: row[39],
-			JC040: row[40],
-			JC041: row[41],
-			JC042: row[42],
-			JC043: row[43],
-			JC044: row[44],
-			JC045: row[45],
-			JC046: row[46],
-			JC047: row[47],
-			JC048: row[48],
-			JC049: row[49],
-			JC050: row[50],
-			JC051: row[51],
-			JC052: row[52],
-			JC053: row[53],
-			JC054: row[54],
-			JC055: row[55],
-			JC056: row[56],
-			JC057: row[57],
-			JC058: row[58],
-			JC059: row[59],
-			JC060: row[60],
-			JC061: row[61],
-			JC062: row[62],
-			JC063: row[63],
-			JC064: row[64],
-			JC065: row[65],
-			JC066: row[66],
-			JC067: row[67],
-			JC068: row[68],
-			JC069: row[69],
-			JC070: row[70],
-			JC071: row[71],
-			JC072: row[72],
-			JC073: row[73],
-			JC074: row[74],
-			JC075: row[75],
-			JC076: row[76],
-			JC077: row[77],
-			JC078: row[78],
-			JC079: row[79],
-			JC080: row[80],
-			JC081: row[81],
-			JC082: row[82],
-			JC083: row[83],
-			JC084: row[84],
-			JC085: row[85],
-			JC086: row[86],
-			JC087: row[87],
-			JC088: row[88],
-			JC089: row[89],
-			JC090: row[90],
-			JC091: row[91],
-			JC092: row[92],
-			JC093: row[93],
-			JC094: row[94],
-			JC095: row[95],
-			JC096: row[96],
-			JC097: row[97],
-			JC098: row[98],
-			JC099: row[99],
-			JC100: row[100],
-			JC101: row[101],
-			JC102: row[102],
-			JC103: row[103],
-			JC104: row[104],
-			JC105: row[105],
-			JC106: row[106],
-			JC107: row[107],
-			JC108: row[108],
-			JC109: row[109],
-			JC110: row[110],
-			JC111: row[111],
-			JC112: row[112],
-			JC113: row[113],
-			JC114: row[114],
-			JC115: row[115],
-			JC116: row[116],
-			JC117: row[117],
-			JC118: row[118],
-			JC119: row[119],
-			JC120: row[120],
-			JC121: row[121],
-			JC122: row[122],
-			JC123: row[123],
-			JC124: row[124],
+		var rec JCHMASRecord
+		// 最初のカラム（エイリアス済みの JC000）を JANCode として取得
+		if b, ok := columns[0].([]byte); ok {
+			rec.JC000JanCode = string(b)
+		} else if columns[0] != nil {
+			rec.JC000JanCode = columns[0].(string)
 		}
 
-		// レコードを生成（キーは row[0] の JANコード）
-		record := JCHMASRecord{
-			JANCode: row[0],
-			JC:      jc,
+		var jf JCFields
+		jfVal := reflect.ValueOf(&jf).Elem()
+		for i := 0; i < colsCount; i++ {
+			var colStr string
+			if b, ok := columns[i].([]byte); ok {
+				colStr = string(b)
+			} else if columns[i] != nil {
+				colStr = columns[i].(string)
+			}
+			if i < jfVal.NumField() && jfVal.Field(i).CanSet() {
+				jfVal.Field(i).SetString(colStr)
+			} else {
+				return nil, fmt.Errorf("failed to set JCFields field index %d", i)
+			}
 		}
-		records = append(records, record)
+		rec.JC = jf
+		records = append(records, rec)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("jchmas rows error: %v", err)
 	}
 	return records, nil
 }
