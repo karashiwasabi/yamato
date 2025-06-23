@@ -1,5 +1,5 @@
-// File: jchms/jchms.go
-package jchms
+// File: jchms/jcshms.go
+package jcshms
 
 import (
 	"database/sql"
@@ -138,7 +138,7 @@ type JCFields struct {
 }
 
 // JCHMASRecord represents one record in table jchmas.
-type JCHMASRecord struct {
+type JCSHMSRecord struct {
 	// JANCode は、SELECT 文で「JC000JanCode AS JC000」により取得された値です。
 	JC000JanCode string
 	// JC は、CSVの125フィールドを保持します。
@@ -147,7 +147,7 @@ type JCHMASRecord struct {
 
 // QueryJCHMASRecordsByJan queries the jchmas table for records matching the JAN code.
 // SELECT 句では、列「JC000JanCode」をエイリアス「JC000」として取得します。
-func QueryJCHMASRecordsByJan(db *sql.DB, jan string) ([]JCHMASRecord, error) {
+func QueryJCSHMSRecordsByJan(db *sql.DB, jan string) ([]JCSHMSRecord, error) {
 	query := `
         SELECT 
 JC000JanCode,
@@ -280,12 +280,12 @@ JC124SaishouYakkaKansanKeisuu
     `
 	rows, err := db.Query(query, jan)
 	if err != nil {
-		return nil, fmt.Errorf("jchmas query error: %v", err)
+		return nil, fmt.Errorf("jcshms query error: %v", err)
 	}
 	defer rows.Close()
 
 	const colsCount = 125
-	var records []JCHMASRecord
+	var records []JCSHMSRecord
 	for rows.Next() {
 		columns := make([]interface{}, colsCount)
 		columnPtrs := make([]interface{}, colsCount)
@@ -293,10 +293,10 @@ JC124SaishouYakkaKansanKeisuu
 			columnPtrs[i] = &columns[i]
 		}
 		if err := rows.Scan(columnPtrs...); err != nil {
-			return nil, fmt.Errorf("jchmas scan error: %v", err)
+			return nil, fmt.Errorf("jcshms scan error: %v", err)
 		}
 
-		var rec JCHMASRecord
+		var rec JCSHMSRecord
 		// 最初のカラム（エイリアス済みの JC000）を JANCode として取得
 		if b, ok := columns[0].([]byte); ok {
 			rec.JC000JanCode = string(b)
