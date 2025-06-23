@@ -26,7 +26,7 @@ document.addEventListener('DOMContentLoaded', () => {
             `<li>` +
               `<strong>JANコード:</strong> ${rec.mA000JC000JanCode}<br>` +
               `<strong>YJコード:</strong> ${rec.mA009JC009YJCode || '―'}<br>` +
-              `<strong>包装単位コード:</strong> ${rec.mA131JA007HousouSuuryouSuuchi || '―'}` +
+              `<strong>包装単位コード:</strong> ${rec.mA131JA006HousouSuuryouSuuchi || '―'}` +
             `</li>`
           ).join('') +
           `</ul>`;

@@ -7,8 +7,6 @@ import (
 	"reflect"
 )
 
-// JCFields holds 125 columns from the JCHMAS CSV.
-// CSV取り込み時、テーブル jchmas の列は「JC000JanCode, JC001, JC002, …, JC124」として保存される前提です。
 type JCFields struct {
 	JC000JanCode                           string
 	JC001JanCodeShikibetsuKubun            string
@@ -137,7 +135,6 @@ type JCFields struct {
 	JC124SaishouYakkaKansanKeisuu          string
 }
 
-// JCHMASRecord represents one record in table jchmas.
 type JCSHMSRecord struct {
 	// JANCode は、SELECT 文で「JC000JanCode AS JC000」により取得された値です。
 	JC000JanCode string
@@ -145,8 +142,6 @@ type JCSHMSRecord struct {
 	JC JCFields
 }
 
-// QueryJCHMASRecordsByJan queries the jchmas table for records matching the JAN code.
-// SELECT 句では、列「JC000JanCode」をエイリアス「JC000」として取得します。
 func QueryJCSHMSRecordsByJan(db *sql.DB, jan string) ([]JCSHMSRecord, error) {
 	query := `
         SELECT 
@@ -275,7 +270,7 @@ JC121ChouzaiHousouTaniCode,
 JC122HanbaiHousouTaniCode,
 JC123IppanMeiKana,
 JC124SaishouYakkaKansanKeisuu
-        FROM jchmas
+        FROM jcshms
         WHERE JC000JanCode = ?
     `
 	rows, err := db.Query(query, jan)
@@ -323,7 +318,7 @@ JC124SaishouYakkaKansanKeisuu
 		records = append(records, rec)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("jchmas rows error: %v", err)
+		return nil, fmt.Errorf("jcshms rows error: %v", err)
 	}
 	return records, nil
 }
