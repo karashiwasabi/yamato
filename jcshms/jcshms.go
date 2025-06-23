@@ -1,12 +1,11 @@
-// File: jchms/jcshms.go
 package jcshms
 
 import (
 	"database/sql"
 	"fmt"
-	"reflect"
 )
 
+// JCFields は jcshms テーブルの125フィールドを表す構造体です
 type JCFields struct {
 	JC000JanCode                           string
 	JC001JanCodeShikibetsuKubun            string
@@ -135,17 +134,21 @@ type JCFields struct {
 	JC124SaishouYakkaKansanKeisuu          string
 }
 
+// JCSHMSRecord は QueryJCSHMSRecordsByJan の返却型
 type JCSHMSRecord struct {
-	// JANCode は、SELECT 文で「JC000JanCode AS JC000」により取得された値です。
 	JC000JanCode string
-	// JC は、CSVの125フィールドを保持します。
-	JC JCFields
+	JC           JCFields
 }
 
+// QueryJCSHMSRecordsByJan は JAN コードを受けて jcshms テーブルを検索し、
+// JCSHMSRecord スライスを返します
+// QueryJCSHMSRecordsByJan は JAN コードを受け、該当する JCSHMSRecord を返します
 func QueryJCSHMSRecordsByJan(db *sql.DB, jan string) ([]JCSHMSRecord, error) {
-	query := `
-        SELECT 
-JC000JanCode,
+	const query = `
+
+
+    SELECT
+      JC000JanCode,
 JC001JanCodeShikibetsuKubun,
 JC002KyuuJanCode,
 JC003TouitsuShouhinCode,
@@ -270,55 +273,169 @@ JC121ChouzaiHousouTaniCode,
 JC122HanbaiHousouTaniCode,
 JC123IppanMeiKana,
 JC124SaishouYakkaKansanKeisuu
-        FROM jcshms
-        WHERE JC000JanCode = ?
-    `
+    FROM jcshms
+    WHERE JC000JanCode = ?
+  `
+
 	rows, err := db.Query(query, jan)
 	if err != nil {
-		return nil, fmt.Errorf("jcshms query error: %v", err)
+		return nil, fmt.Errorf("jcshms query error: %w", err)
 	}
 	defer rows.Close()
 
-	const colsCount = 125
-	var records []JCSHMSRecord
+	var out []JCSHMSRecord
 	for rows.Next() {
-		columns := make([]interface{}, colsCount)
-		columnPtrs := make([]interface{}, colsCount)
-		for i := 0; i < colsCount; i++ {
-			columnPtrs[i] = &columns[i]
-		}
-		if err := rows.Scan(columnPtrs...); err != nil {
-			return nil, fmt.Errorf("jcshms scan error: %v", err)
-		}
-
 		var rec JCSHMSRecord
-		// 最初のカラム（エイリアス済みの JC000）を JANCode として取得
-		if b, ok := columns[0].([]byte); ok {
-			rec.JC000JanCode = string(b)
-		} else if columns[0] != nil {
-			rec.JC000JanCode = columns[0].(string)
+		// Scan の順序は上記 SELECT とまったく同じ順番で書くこと
+		if err := rows.Scan(
+			&rec.JC.JC000JanCode,
+			&rec.JC.JC001JanCodeShikibetsuKubun,
+			&rec.JC.JC002KyuuJanCode,
+			&rec.JC.JC003TouitsuShouhinCode,
+			&rec.JC.JC004YakkaKijunShuusaiIyakuhinCode,
+			&rec.JC.JC005KyuuYakkaKijunShuusaiIyakuhinCode,
+			&rec.JC.JC006HOTBangou,
+			&rec.JC.JC007ReseputoCode1,
+			&rec.JC.JC008ReseputoCode2,
+			&rec.JC.JC009YJCode,
+			&rec.JC.JC010YakkouBunruiCode,
+			&rec.JC.JC011YakkouBunruiMei,
+			&rec.JC.JC012ShiyouKubunCode,
+			&rec.JC.JC013ShiyouKubunMeishou,
+			&rec.JC.JC014NihonHyoujunShouhinBunruiBangou,
+			&rec.JC.JC015ZaikeiCode,
+			&rec.JC.JC016ZaikeiKigou,
+			&rec.JC.JC017ZaikeiMeishou,
+			&rec.JC.JC018ShouhinMei,
+			&rec.JC.JC019HankakuShouhinMei,
+			&rec.JC.JC020KikakuYouryou,
+			&rec.JC.JC021HankakuKikakuYouryou,
+			&rec.JC.JC022ShouhinMeiKanaSortYou,
+			&rec.JC.JC023ShouhinMeiKanpouYouKigou,
+			&rec.JC.JC024IppanMeishou,
+			&rec.JC.JC025YakkaShuusaiMeishou,
+			&rec.JC.JC026ReseYouIyakuhinMei,
+			&rec.JC.JC027KikakuTaniMeishou,
+			&rec.JC.JC028KikakuTaniKigou,
+			&rec.JC.JC029HanbaiMotoCode,
+			&rec.JC.JC030HanbaiMotoMei,
+			&rec.JC.JC031HanbaiMotoMeiKana,
+			&rec.JC.JC032HanbaiMotoMeiRyakuMei,
+			&rec.JC.JC033SeizouMotoYunyuuMotoCode,
+			&rec.JC.JC034SeizouMotoYunyuuMotoMei,
+			&rec.JC.JC035SeizouMotoYunyuuMotoMeiKana,
+			&rec.JC.JC036SeizouMotoYunyuuMotoMeiRyakuMei,
+			&rec.JC.JC037HousouKeitai,
+			&rec.JC.JC038HousouTaniSuuchi,
+			&rec.JC.JC039HousouTaniTani,
+			&rec.JC.JC040HousouSuuryouSuuchi,
+			&rec.JC.JC041HousouSuuryouTani,
+			&rec.JC.JC042HousouIrisuuSuuchi,
+			&rec.JC.JC043HousouIrisuuTani,
+			&rec.JC.JC044HousouSouryouSuuchi,
+			&rec.JC.JC045HousouSouryouTani,
+			&rec.JC.JC046HousouYouryouSuuchi,
+			&rec.JC.JC047HousouYouryouTani,
+			&rec.JC.JC048HousouYakkaKeisuu,
+			&rec.JC.JC049GenTaniYakka,
+			&rec.JC.JC050GenHousouYakka,
+			&rec.JC.JC051KyuuTaniYakka,
+			&rec.JC.JC052KyuuHousouYakka,
+			&rec.JC.JC053KokuchiTaniYakka,
+			&rec.JC.JC054KokuchiHousouYakka,
+			&rec.JC.JC055YakkaKaiteiNengappi,
+			&rec.JC.JC056YakkaShuusaiNengappi,
+			&rec.JC.JC057HanbaiKaishiNengappi,
+			&rec.JC.JC058KeikaSochiNengappi,
+			&rec.JC.JC059HatsubaiChuushiNengappi,
+			&rec.JC.JC060SeizouChuushiNengappi,
+			&rec.JC.JC061Doyaku,
+			&rec.JC.JC062Gekiyaku,
+			&rec.JC.JC063Mayaku,
+			&rec.JC.JC064Kouseishinyaku,
+			&rec.JC.JC065Kakuseizai,
+			&rec.JC.JC066KakuseizaiGenryou,
+			&rec.JC.JC067ShuukanseiIyakuhin,
+			&rec.JC.JC068ShiteiIyakuhinKyuuKiseiKubun,
+			&rec.JC.JC069YoushijiIyakuhinKyuuKiseiKubun,
+			&rec.JC.JC070KetsuekiSeizai,
+			&rec.JC.JC071NihonYakkyokuhou,
+			&rec.JC.JC072YuukouKikan,
+			&rec.JC.JC073ShiyouKigen,
+			&rec.JC.JC074SeibutsuYuraiSeihin,
+			&rec.JC.JC075Kouhatsuhin,
+			&rec.JC.JC076YakkaKijunShuusaiKubun,
+			&rec.JC.JC077KichouGimuKubun,
+			&rec.JC.JC078ShouhinKubun,
+			&rec.JC.JC079ShohousenIyakuhin,
+			&rec.JC.JC080ChuushiRiyuuKubun,
+			&rec.JC.JC081MishiyouKyuuRyuutsuuKanrihin,
+			&rec.JC.JC082MentenanceKubun,
+			&rec.JC.JC083KouhatsuhinNoAruSenpatsuhinKubun,
+			&rec.JC.JC084AuthorizedGeneric,
+			&rec.JC.JC085Biosimilar,
+			&rec.JC.JC086HighRiskYaku,
+			&rec.JC.JC087Kuuran1,
+			&rec.JC.JC088Kuuran2,
+			&rec.JC.JC089Shitsuon,
+			&rec.JC.JC090Reisho,
+			&rec.JC.JC091Reizou,
+			&rec.JC.JC092Reitou,
+			&rec.JC.JC093Ansho,
+			&rec.JC.JC094Shakou,
+			&rec.JC.JC095KimitsuYouki,
+			&rec.JC.JC096MippuuYouki,
+			&rec.JC.JC097Kikenbutsu,
+			&rec.JC.JC098OndoJougen,
+			&rec.JC.JC099OndoKagen,
+			&rec.JC.JC100SonotaHokanjouNoChui,
+			&rec.JC.JC101KonpouJuuryouSizeJouhou,
+			&rec.JC.JC102KonpouTateSizeJouhou,
+			&rec.JC.JC103KonpouYokoSizeJouhou,
+			&rec.JC.JC104KonpouTakasaSizeJouhou,
+			&rec.JC.JC105KonpouTaiseiSizeJouhou,
+			&rec.JC.JC106ChuubakoJuuryouSizeJouhou,
+			&rec.JC.JC107ChuubakoTateSizeJouhou,
+			&rec.JC.JC108ChuubakoYokoSizeJouhou,
+			&rec.JC.JC109ChuubakoTakasaSizeJouhou,
+			&rec.JC.JC110ChuubakoTaiseiSizeJouhou,
+			&rec.JC.JC111KousouJuuryouSizeJouhou,
+			&rec.JC.JC112KousouTateSizeJouhou,
+			&rec.JC.JC113KousouYokoSizeJouhou,
+			&rec.JC.JC114KousouTakasaSizeJouhou,
+			&rec.JC.JC115KousouTaiseiSizeJouhou,
+			&rec.JC.JC116KonpouTaniSizeJouhou,
+			&rec.JC.JC117HacchuuTaniSizeJouhou,
+			&rec.JC.JC118KoushinKubun,
+			&rec.JC.JC119TourokuNengappi,
+			&rec.JC.JC120KoushinNengappi,
+			&rec.JC.JC121ChouzaiHousouTaniCode,
+			&rec.JC.JC122HanbaiHousouTaniCode,
+			&rec.JC.JC123IppanMeiKana,
+			&rec.JC.JC124SaishouYakkaKansanKeisuu,
+		); err != nil {
+			return nil, fmt.Errorf("jcshms scan error: %w", err)
 		}
-
-		var jf JCFields
-		jfVal := reflect.ValueOf(&jf).Elem()
-		for i := 0; i < colsCount; i++ {
-			var colStr string
-			if b, ok := columns[i].([]byte); ok {
-				colStr = string(b)
-			} else if columns[i] != nil {
-				colStr = columns[i].(string)
-			}
-			if i < jfVal.NumField() && jfVal.Field(i).CanSet() {
-				jfVal.Field(i).SetString(colStr)
-			} else {
-				return nil, fmt.Errorf("failed to set JCFields field index %d", i)
-			}
-		}
-		rec.JC = jf
-		records = append(records, rec)
+		out = append(out, rec)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("jcshms rows error: %v", err)
+		return nil, fmt.Errorf("jcshms rows error: %w", err)
 	}
-	return records, nil
+	return out, nil
+}
+
+func QueryByJan(db *sql.DB, jan string) ([]JCFields, error) {
+	recs, err := QueryJCSHMSRecordsByJan(db, jan)
+	if err != nil {
+		return nil, err
+	}
+	// JCSHMSRecord の中身（.JC）を抜き出す
+	out := make([]JCFields, len(recs))
+	for i, r := range recs {
+		f := r.JC
+		// 主キーであるJC000JanCodeも JCFields に含めたい場合はここで設定
+		f.JC000JanCode = r.JC000JanCode
+		out[i] = f
+	}
+	return out, nil
 }

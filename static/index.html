@@ -3,38 +3,25 @@
 <head>
   <meta charset="UTF-8">
   <title>YAMATO Upload</title>
-  <!-- 必要に応じてスタイルシートを調整 -->
   <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
   <header>
-    <!-- DATファイルアップロードボタン -->
     <button id="datBtn">DATファイルアップロード</button>
-    <!-- USAGEファイルアップロードボタン -->
     <button id="usageBtn">USAGEファイルアップロード</button>
-    <!-- MA0確認ボタン -->
-    <button id="ma0Btn">MA0確認peropero</button>
   </header>
-  
-  <!-- アップロード処理の進捗や結果を表示するエリア -->
+
   <section id="indicator"></section>
-  
-  <!-- MA0の中身を表示するエリア -->
-  <section id="ma0Container"></section>
-  
-  <!-- 解析結果（必要に応じてテーブル表示） -->
+
   <table id="outputTable">
     <thead></thead>
     <tbody></tbody>
   </table>
-  
-  <!-- 隠しのファイル入力（DAT/USAGE用） -->
+
   <input type="file" id="datInput" accept=".dat" multiple hidden>
   <input type="file" id="usageInput" accept=".csv" multiple hidden>
-  
-  <!-- JavaScriptファイルの読み込み -->
+
   <script src="js/dat.js"></script>
   <script src="js/usage.js"></script>
-  <script src="js/ma0.js"></script>
 </body>
 </html>

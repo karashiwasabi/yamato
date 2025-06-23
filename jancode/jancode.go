@@ -39,30 +39,97 @@ type JANCODERecord struct {
 	JA029                      string
 }
 
+// QueryByJan は JAN コードを受け取り、該当レコードを返します
 func QueryJANCODERecordsByJan(db *sql.DB, jan string) ([]JANCODERecord, error) {
-	query := `
-        SELECT 
+	const sqlQuery = `
+    SELECT
+
+
+JA000,
 JA001JanCode,
-JA006HousouSuuryouSuuchi
+JA002,
+JA003,
+JA004,
+JA005,
+JA006HousouSuuryouSuuchi,
+JA007HousouSuuryouTaniCode,
+JA008HousouSouryouSuuchi,
+JA009,
+JA010,
+JA011,
+JA012,
+JA013,
+JA014,
+JA015,
+JA016,
+JA017,
+JA018,
+JA019,
+JA020,
+JA021,
+JA022,
+JA023,
+JA024,
+JA025,
+JA026,
+JA027,
+JA028,
+JA029
         FROM jancode
         WHERE JA001JanCode = ?
-    `
-	rows, err := db.Query(query, jan)
+ `
+	rows, err := db.Query(sqlQuery, jan)
 	if err != nil {
-		return nil, fmt.Errorf("jancode query error: %v", err)
+		return nil, fmt.Errorf("jancode query error: %w", err)
 	}
 	defer rows.Close()
 
-	var records []JANCODERecord
+	var results []JANCODERecord
 	for rows.Next() {
 		var rec JANCODERecord
-		if err := rows.Scan(&rec.JA001JanCode, &rec.JA006HousouSuuryouSuuchi); err != nil {
-			return nil, fmt.Errorf("jancode row scan error: %v", err)
+		if err := rows.Scan(
+			&rec.JA000,
+			&rec.JA001JanCode,
+			&rec.JA002,
+			&rec.JA003,
+			&rec.JA004,
+			&rec.JA005,
+			&rec.JA006HousouSuuryouSuuchi,
+			&rec.JA007HousouSuuryouTaniCode,
+			&rec.JA008HousouSouryouSuuchi,
+			&rec.JA009,
+			&rec.JA010,
+			&rec.JA011,
+			&rec.JA012,
+			&rec.JA013,
+			&rec.JA014,
+			&rec.JA015,
+			&rec.JA016,
+			&rec.JA017,
+			&rec.JA018,
+			&rec.JA019,
+			&rec.JA020,
+			&rec.JA021,
+			&rec.JA022,
+			&rec.JA023,
+			&rec.JA024,
+			&rec.JA025,
+			&rec.JA026,
+			&rec.JA027,
+			&rec.JA028,
+			&rec.JA029,
+		); err != nil {
+			return nil, fmt.Errorf("jancode scan error: %w", err)
 		}
-		records = append(records, rec)
+		results = append(results, rec)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("jancode rows error: %v", err)
+		return nil, fmt.Errorf("jancode rows error: %w", err)
 	}
-	return records, nil
+	return results, nil
+}
+
+// QueryByJan は QueryJANCODERecordsByJan の alias
+func QueryByJan(db *sql.DB, jan string) ([]JANCODERecord, error) {
+	return QueryJANCODERecordsByJan(db, jan)
 }
