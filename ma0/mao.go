@@ -1,3 +1,4 @@
+// ma0/mao.go
 package ma0
 
 import (
@@ -8,9 +9,11 @@ import (
 
 	"YAMATO/jancode"
 	"YAMATO/jcshms"
+	"YAMATO/model"
 )
 
-// MA0Record は元の155フィールドすべてを定義してください
+// MA0Record は、マスター連携用の全155フィールドを保持する構造体です。
+// ※フィールド名は "MAxxxJCyyy"（JC マスター連携用）と "MAxxxJAyyy"（JANコード連携用）に分かれています。
 type MA0Record struct {
 	MA000JC000JanCode                           string
 	MA001JC001JanCodeShikibetsuKubun            string
@@ -169,10 +172,11 @@ type MA0Record struct {
 	MA154JA029                                  string
 }
 
+// DB は、ma0 連携用に参照するグローバルなデータベース接続です。
 var DB *sql.DB
 
-// Migrate は MA0Record の全フィールドを TEXT として
-// 最初のフィールドを PRIMARY KEY にした ma0 テーブルを作成します。
+// Migrate は、MA0Record の全フィールドを TEXT 型として、
+// 最初のフィールドを PRIMARY KEY としたテーブル "ma0" を作成します。
 func Migrate(db *sql.DB) error {
 	t := reflect.TypeOf(MA0Record{})
 	cols := make([]string, t.NumField())
@@ -192,7 +196,7 @@ func Migrate(db *sql.DB) error {
 	return err
 }
 
-// columns は MA0Record のフィールド名一覧を返します。
+// columns は MA0Record の各フィールド名をスライスとして返します。
 func columns() []string {
 	t := reflect.TypeOf(MA0Record{})
 	out := make([]string, t.NumField())
@@ -202,7 +206,7 @@ func columns() []string {
 	return out
 }
 
-// values は MA0Record のフィールド値一覧を返します。
+// values は与えられた MA0Record のフィールド値の一覧を []interface{} として返します。
 func values(rec MA0Record) []interface{} {
 	v := reflect.ValueOf(rec)
 	out := make([]interface{}, v.NumField())
@@ -212,17 +216,18 @@ func values(rec MA0Record) []interface{} {
 	return out
 }
 
-// InsertIgnore は複数の MA0Record をバルクで INSERT OR IGNORE します。
-// DB 側の PRIMARY KEY 制約で重複を防ぎます。
+// InsertIgnore は、複数の MA0Record を一括で INSERT OR IGNORE します。
+// PRIMARY KEY 制約により重複が自動的に防がれます。
 func InsertIgnore(db *sql.DB, recs []MA0Record) error {
 	cols := columns()
-	ph := make([]string, len(cols))
-	for i := range ph {
-		ph[i] = "?"
+	placeholders := make([]string, len(cols))
+	for i := range placeholders {
+		placeholders[i] = "?"
 	}
 	stmt := fmt.Sprintf(
 		"INSERT OR IGNORE INTO ma0 (%s) VALUES (%s)",
-		strings.Join(cols, ","), strings.Join(ph, ","),
+		strings.Join(cols, ","),
+		strings.Join(placeholders, ","),
 	)
 	prep, err := db.Prepare(stmt)
 	if err != nil {
@@ -238,86 +243,160 @@ func InsertIgnore(db *sql.DB, recs []MA0Record) error {
 	return nil
 }
 
-// CheckOrCreateMA0 は指定JANコードで ma0 を検索。
-// 存在すればそのレコードを返し created=false。
-// 見つからなければ jcshms/jancode からマスター照会を行い、
-// 新規レコードを INSERT OR IGNORE したうえで created=true を返します。
+// CheckOrCreateMA0 は、指定された JAN コードで ma0 テーブルを検索します。
+// 既存ならそのレコードを返し、created=false とします。
+// 見つからなければ、jcshms および jancode からマスター照会を行い、
+// 新規レコードを INSERT OR IGNORE して created=true として返します。
 func CheckOrCreateMA0(jan string) (MA0Record, bool, error) {
-	// 1) ma0 既存チェック
+	// 1) ma0 に既にレコードが存在するかチェック
 	var rec MA0Record
 	cols := columns()
 	addrs := make([]interface{}, len(cols))
-	rv := reflect.ValueOf(&rec).Elem()
+	recVal := reflect.ValueOf(&rec).Elem()
 	for i := range addrs {
-		addrs[i] = rv.Field(i).Addr().Interface()
+		addrs[i] = recVal.Field(i).Addr().Interface()
 	}
-	sel := fmt.Sprintf("SELECT %s FROM ma0 WHERE MA000JC000JanCode = ?", strings.Join(cols, ","))
-	err := DB.QueryRow(sel, jan).Scan(addrs...)
+	query := fmt.Sprintf("SELECT %s FROM ma0 WHERE MA000JC000JanCode = ?", strings.Join(cols, ","))
+	err := DB.QueryRow(query, jan).Scan(addrs...)
 	if err == nil {
+		// 既存レコードが見つかった場合
 		return rec, false, nil
 	}
 	if err != sql.ErrNoRows {
 		return MA0Record{}, false, fmt.Errorf("ma0 select error: %v", err)
 	}
 
-	// 2) マスター照会＆フィールドコピー
+	// 2) マスター照会（jcshms および jancode から）およびフィールドのコピー
 	cs, _ := jcshms.QueryByJan(DB, jan)
 	ja, _ := jancode.QueryByJan(DB, jan)
 
-	// 両方ともヒットなしなら、そもそも登録しない
+	// 両方のマスターにヒットがなければ、登録せずに終了する
 	if len(cs) == 0 && len(ja) == 0 {
 		return MA0Record{}, false, nil
 	}
 
-	recRv := reflect.ValueOf(&rec).Elem()
-
-	// JCSHMS からのコピー
+	// 反射を用いて、jcshms からの項目を MA0Record にコピー
 	if len(cs) > 0 {
-		jcRv := reflect.ValueOf(cs[0])
-		for i := 0; i < recRv.NumField(); i++ {
-			f := recRv.Type().Field(i)
-			if strings.HasPrefix(f.Name, "MA") && strings.Contains(f.Name, "JC") {
-				// MAテーブル側は "MAxxxJCyyy"、JCFields側は "JCyyy"
-				masterName := f.Name[strings.Index(f.Name, "JC"):]
-				if v := jcRv.FieldByName(masterName); v.IsValid() {
-					recRv.Field(i).SetString(v.String())
+		jcVal := reflect.ValueOf(cs[0])
+		for i := 0; i < recVal.NumField(); i++ {
+			field := recVal.Type().Field(i)
+			// MAレコードで "JC" を含むフィールドは、jcshms の対応フィールドへマッピング
+			if strings.HasPrefix(field.Name, "MA") && strings.Contains(field.Name, "JC") {
+				idx := strings.Index(field.Name, "JC")
+				masterName := field.Name[idx:]
+				if masterField := jcVal.FieldByName(masterName); masterField.IsValid() {
+					recVal.Field(i).SetString(masterField.String())
 				}
 			}
 		}
 	}
 
-	// JANCODE からのコピー
+	// jancode からも同様にコピー（フィールド名に "JA" を含むもの）
 	if len(ja) > 0 {
-		jaRv := reflect.ValueOf(ja[0])
-		for i := 0; i < recRv.NumField(); i++ {
-			f := recRv.Type().Field(i)
-			if strings.HasPrefix(f.Name, "MA") && strings.Contains(f.Name, "JA") {
-				masterName := f.Name[strings.Index(f.Name, "JA"):]
-				if v := jaRv.FieldByName(masterName); v.IsValid() {
-					recRv.Field(i).SetString(v.String())
+		jaVal := reflect.ValueOf(ja[0])
+		for i := 0; i < recVal.NumField(); i++ {
+			field := recVal.Type().Field(i)
+			if strings.HasPrefix(field.Name, "MA") && strings.Contains(field.Name, "JA") {
+				idx := strings.Index(field.Name, "JA")
+				masterName := field.Name[idx:]
+				if masterField := jaVal.FieldByName(masterName); masterField.IsValid() {
+					recVal.Field(i).SetString(masterField.String())
 				}
 			}
 		}
 	}
 
-	// 主キーだけは必ずセット
+	// 主キー（JANコード）の設定
 	rec.MA000JC000JanCode = jan
 
-	// 3) INSERT OR IGNORE（ここに来るのは少なくともどちらかでヒットした時のみ）
+	// 3) INSERT OR IGNORE により DB へ新規レコード挿入
 	if err := InsertIgnore(DB, []MA0Record{rec}); err != nil {
 		return MA0Record{}, false, fmt.Errorf("ma0 insert error: %v", err)
 	}
 	return rec, true, nil
 }
 
-// ProcessMA0Record は dat.go／usage.go から呼ばれ、
-// JAN を含むデータスライスを元に CheckOrCreateMA0 を実行します。
+// ProcessMA0Record は、dat.go や usage.go から呼び出され、
+// 与えられたデータスライスから JAN コードを抽出して CheckOrCreateMA0 を実行します。
+// ※ data の 3 番目の要素（インデックス2）が JAN コードであるという慣例に従います。
 func ProcessMA0Record(data []string) error {
-	// data 中の何番目に JAN が入っているかは慣例に合わせてください
 	if len(data) < 3 {
 		return fmt.Errorf("insufficient fields: %v", data)
 	}
 	jan := data[2]
 	_, _, err := CheckOrCreateMA0(jan)
 	return err
+}
+
+// InsertDATRecord は、与えられた model.DATRecord を datrecords テーブルに挿入します。
+// organizedFlag には、1 (organized) または 0 (disorganized) を指定します。
+func InsertDATRecord(db *sql.DB, rec model.DATRecord, organizedFlag int) error {
+	stmt := `
+		INSERT OR IGNORE INTO datrecords (
+			CurrentOroshiCode,
+			DatDate,
+			DatDeliveryFlag,
+			DatReceiptNumber,
+			DatLineNumber,
+			DatJanCode,
+			DatProductName,
+			DatQuantity,
+			DatUnitPrice,
+			DatSubtotal,
+			DatPackagingDrugPrice,
+			DatExpiryDate,
+			DatLotNumber,
+			organizedFlag
+		)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`
+	_, err := db.Exec(stmt,
+		rec.CurrentOroshiCode, // DatOroshiCode 列へ
+		rec.DatDate,           // DatDate 列へ
+		rec.DatFlag,           // DatDeliveryFlag 列へ（旧：DatDeliveryFlag → DatFlag）
+		rec.DatRecNo,          // DatReceiptNumber 列へ
+		rec.DatLineNo,         // DatLineNumber 列へ
+		rec.DatJan,            // DatJanCode 列へ
+		rec.DatProductName,    // DatProductName 列へ
+		rec.DatQty,            // DatQuantity 列へ
+		rec.DatUnit,           // DatUnitPrice 列へ
+		rec.DatSub,            // DatSubtotal 列へ
+		rec.DatPkg,            // DatPackagingDrugPrice 列へ
+		rec.DatExp,            // DatExpiryDate 列へ
+		rec.DatLot,            // DatLotNumber 列へ
+		organizedFlag,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to insert DATRecord: %w", err)
+	}
+	return nil
+}
+
+// InsertUsageRecord inserts one USAGERecord into the "usage_records" table.
+func InsertUsageRecord(db *sql.DB, rec model.USAGERecord) error {
+	stmt := `
+		INSERT OR IGNORE INTO usage_records (
+			usageDate,
+			usageYjCode,
+			usageJanCode,
+			usageProductName,
+			usageAmount,
+			usageUnit,
+			usageUnitName,
+			organizedFlag
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+	`
+	_, err := db.Exec(stmt,
+		rec.UsageDate,
+		rec.UsageYjCode,
+		rec.UsageJanCode,
+		rec.UsageProductName,
+		rec.UsageAmount,
+		rec.UsageUnit,
+		rec.UsageUnitName,
+		rec.OrganizedFlag,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to insert USAGE record: %w", err)
+	}
+	return nil
 }

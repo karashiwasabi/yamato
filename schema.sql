@@ -320,3 +320,34 @@ JA029 TEXT,
 PRIMARY KEY(JA001JanCode)
 );
 
+CREATE TABLE IF NOT EXISTS datrecords (
+  CurrentOroshiCode         TEXT,
+  DatDate               TEXT,
+  DatDeliveryFlag       TEXT,
+  DatReceiptNumber      TEXT,
+  DatLineNumber         TEXT,
+  DatJanCode            TEXT,
+  DatProductName        TEXT,
+  DatQuantity           TEXT,
+  DatUnitPrice          TEXT,
+  DatSubtotal           TEXT,
+  DatPackagingDrugPrice TEXT,
+  DatExpiryDate         TEXT,
+  DatLotNumber          TEXT,
+  organizedFlag         INTEGER
+);
+
+
+
+CREATE TABLE IF NOT EXISTS usagerecords (
+    usageDate         TEXT,
+    usageYjCode       TEXT,
+    usageJanCode      TEXT,
+    usageProductName  TEXT,
+    usageAmount       TEXT,
+    usageUnit         TEXT,
+    usageUnitName     TEXT,
+    organizedFlag     INTEGER NOT NULL DEFAULT 0, -- 1: organized, 0: disorganized
+    PRIMARY KEY (usageDate, usageYjCode, usageJanCode)
+);
+
