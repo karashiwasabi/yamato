@@ -2,16 +2,17 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>YAMATO Upload</title>
   <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
-  <header>
-    <button id="datBtn">DATファイルアップロード</button>
-    <button id="usageBtn">USAGEファイルアップロード</button>
+  <header id="header">
+    <div id="indicator"></div>
+    <nav>
+      <button id="datBtn">DAT</button>
+      <button id="usageBtn">USAGE</button>
+      <button id="aggregateBtn">集計</button>
+    </nav>
   </header>
-
-  <section id="indicator"></section>
 
   <table id="outputTable">
     <thead></thead>
@@ -23,5 +24,6 @@
 
   <script src="js/dat.js"></script>
   <script src="js/usage.js"></script>
+  <script src="js/aggregate.js"></script>
 </body>
 </html>

@@ -1,4 +1,5 @@
 document.addEventListener('DOMContentLoaded', () => {
+  // 必要なDOM要素の取得
   const usageBtn   = document.getElementById('usageBtn');
   const usageInput = document.getElementById('usageInput');
   const indicator  = document.getElementById('indicator');
@@ -6,13 +7,22 @@ document.addEventListener('DOMContentLoaded', () => {
   const thead      = table.querySelector('thead');
   const tbody      = table.querySelector('tbody');
 
-  usageBtn.addEventListener('click', () => usageInput.click());
+  // 「USAGEファイルアップロード」ボタン押下時：
+  // ①出力テーブルの内容をクリア
+  // ②隠しファイル入力をトリガー
+  usageBtn.addEventListener('click', () => {
+    thead.innerHTML = "";
+    tbody.innerHTML = "";
+    usageInput.click();
+  });
 
+  // ファイルが選択された時の処理
   usageInput.addEventListener('change', async () => {
     if (!usageInput.files || usageInput.files.length === 0) return;
 
     indicator.textContent = 'USAGEアップロード中…';
-    // 新しいヘッダー（項目名）に合わせて設定
+
+    // USAGE用のテーブルヘッダー、ボディを初期化
     thead.innerHTML = `
       <tr>
         <th>日付</th>
@@ -25,15 +35,24 @@ document.addEventListener('DOMContentLoaded', () => {
       </tr>`;
     tbody.innerHTML = '';
 
+    // 選択された各ファイルに対してアップロード処理を実施
     for (let file of usageInput.files) {
       const formData = new FormData();
       formData.append('usageFileInput[]', file);
 
       try {
-        const res = await fetch('/uploadUsage', { method: 'POST', body: formData });
-        if (!res.ok) throw new Error(`HTTPエラー: ${res.status}`);
+        const res = await fetch('/uploadUsage', {
+          method: 'POST',
+          body: formData
+        });
+        if (!res.ok) {
+          throw new Error(`HTTPエラー: ${res.status}`);
+        }
+        // サーバからJSON形式で結果を取得
         const result = await res.json();
         indicator.textContent = `${file.name}: USAGE読み込み: ${result.TotalRecords} 件`;
+
+        // 結果のUSAGERecordsをテーブルに追加
         if (result.USAGERecords && result.USAGERecords.length > 0) {
           result.USAGERecords.forEach(record => {
             const tr = document.createElement('tr');

@@ -1,26 +1,63 @@
+/* すべての要素のマージン・パディングをリセット */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
 body {
+  /* フォントサイズに対しては何もしない */
   font-family: Arial, sans-serif;
-  margin: 1em;
 }
-header button {
-  margin-right: .5em;
-  padding: .4em 1em;
+
+/* ヘッダー全体をstickyに */
+#header {
+  position: sticky;
+  top: 0;
+  background-color: #f8f8f8;
+  border-bottom: 1px solid #ccc;
+  /* マージン・パディングは0ですが、最低高さだけは確保 */
+  min-height: 50px;
 }
+
+
+
+/* indicatorはheader内に配置 */
 #indicator {
-  margin: 1em 0;
-  font-weight: bold;
+  background-color: #ddd;
+  border-bottom: 1px solid #aaa;
+  /* マージン、パディングは0 */
 }
+
+/* ナビゲーションボタン */
+nav button {
+  background-color: #007BFF;   /* 青い背景 */
+  color: #fff;                 /* 白い文字 */
+  padding: 10px 15px;          /* 上下に10px、左右に15pxの余白 */
+  border: none;                /* 境界線は無し */
+  border-radius: 4px;          /* 少し角を丸く */
+  font-size: 16px;             /* 読みやすいサイズ */
+  margin: 5px;                 /* 各ボタン間に5pxの間隔 */
+  cursor: pointer;             /* カーソルをポインターに */
+  transition: background-color 0.3s ease; /* ホバー時の背景色変化にスムーズなアニメーション */
+}
+
+nav button:hover {
+  background-color: #0056b3;   /* ホバー時の色を少し濃い青に */
+}
+
+
+/* 出力テーブル */
 #outputTable {
   width: 100%;
   border-collapse: collapse;
+  /* マージン 0 */
 }
+
 #outputTable th,
 #outputTable td {
   border: 1px solid #ccc;
-  padding: .3em .6em;
-  font-size: .85em;
-}
-#outputTable th {
-  background: #f0f0f0;
+  /* マージン、パディング 0 */
+  padding: 0;
   text-align: left;
 }

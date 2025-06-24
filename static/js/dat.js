@@ -1,5 +1,5 @@
 document.addEventListener('DOMContentLoaded', () => {
-  // 各DOM要素の取得
+  // 必要なDOM要素の取得
   const btn       = document.getElementById('datBtn');
   const input     = document.getElementById('datInput');
   const indicator = document.getElementById('indicator');
@@ -7,19 +7,23 @@ document.addEventListener('DOMContentLoaded', () => {
   const thead     = table.querySelector('thead');
   const tbody     = table.querySelector('tbody');
 
-  // DATファイルアップロードボタンをクリックで隠しファイル入力をトリガー
+  // 「DATファイルアップロード」ボタン押下時：
+  // ①テーブル内（出力）の既存内容をクリア
+  // ②隠しファイル入力をトリガーしてファイル選択ダイアログを表示
   btn.addEventListener('click', () => {
+    thead.innerHTML = "";
+    tbody.innerHTML = "";
     input.click();
   });
 
-  // ファイル選択後の処理
+  // ファイルが選択された時の処理
   input.addEventListener('change', async () => {
     if (!input.files.length) return;
 
-    // アップロード開始状態を indicator に表示
+    // アップロード開始状態の表示
     indicator.textContent = 'DATアップロード中…';
 
-    // テーブルヘッダー、ボディの初期化
+    // テーブルヘッダー、ボディの初期化（DAT用）
     thead.innerHTML = `
       <tr>
         <th>卸コード</th>
@@ -38,24 +42,26 @@ document.addEventListener('DOMContentLoaded', () => {
       </tr>`;
     tbody.innerHTML = '';
 
-    // 選択された全ファイルについてループ処理
+    // 選択された各ファイルに対してアップロード処理を実施
     for (let file of input.files) {
       const formData = new FormData();
       formData.append('datFileInput[]', file);
 
       try {
-        // /uploadDat エンドポイントに対して POST リクエスト送信
-        const res = await fetch('/uploadDat', { method: 'POST', body: formData });
+        // サーバの /uploadDat エンドポイントに対してPOSTリクエスト
+        const res = await fetch('/uploadDat', {
+          method: 'POST',
+          body: formData
+        });
         if (!res.ok) {
           throw new Error(`HTTPステータス: ${res.status}`);
         }
-        // サーバーから返却される JSON を取得（"DATRecords" などのキーを持つ）
+        // レスポンスはJSON形式で取得（DAT読み込み件数などの情報を含む）
         const result = await res.json();
 
-        // 指定ファイルの処理結果を indicator に表示
         indicator.textContent = `${file.name}: DAT読み込み: ${result.DATReadCount} 件 | MA0作成: ${result.MA0CreatedCount} 件 | 重複: ${result.DuplicateCount} 件`;
 
-        // DATRecords に含まれる各レコードをテーブルへ追加
+        // 結果のDATRecordsをテーブルに追加
         if (result.DATRecords && result.DATRecords.length > 0) {
           result.DATRecords.forEach(record => {
             const tr = document.createElement('tr');
@@ -78,14 +84,12 @@ document.addEventListener('DOMContentLoaded', () => {
           });
         }
       } catch (err) {
-        // エラー発生時の処理
         indicator.textContent = "アップロード中にエラーが発生しました: " + err.message;
         console.error(err);
       }
     }
-    // 全ファイル処理完了後のメッセージ
     indicator.textContent += " 完了";
-    // 入力値のリセット
+    // 次回のアップロードのためにファイル入力をリセット
     input.value = '';
   });
 });

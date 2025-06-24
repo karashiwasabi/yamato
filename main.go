@@ -16,6 +16,7 @@ import (
 	"golang.org/x/text/encoding/japanese"
 	"golang.org/x/text/transform"
 
+	"YAMATO/aggregate"
 	"YAMATO/dat"
 	"YAMATO/ma0"
 	"YAMATO/model"
@@ -224,6 +225,7 @@ func main() {
 
 	// ma0 パッケージに DB をセット（MA0 連携用）
 	ma0.DB = db
+	aggregate.SetDB(db)
 
 	// schema.sql を読み込み実行
 	schema, err := os.ReadFile("schema.sql")
@@ -246,6 +248,8 @@ func main() {
 	http.Handle("/", http.FileServer(http.Dir("./static")))
 	http.HandleFunc("/uploadDat", uploadDatHandler)
 	http.HandleFunc("/uploadUsage", uploadUsageHandler)
+	http.HandleFunc("/aggregate", aggregate.AggregateHandler)
+	http.HandleFunc("/productName", productNameHandler)
 
 	// 自動ブラウザ起動
 	go autoLaunchBrowser("http://localhost:8080")
