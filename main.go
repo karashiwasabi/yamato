@@ -25,6 +25,7 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
+// loadCSV は Shift-JIS エンコードの CSV を指定テーブルにロードするユーティリティ
 func loadCSV(db *sql.DB, filePath, table string, cols int, skipHeader bool) error {
 	f, err := os.Open(filePath)
 	if err != nil {
@@ -82,6 +83,7 @@ func loadCSV(db *sql.DB, filePath, table string, cols int, skipHeader bool) erro
 	return tx.Commit()
 }
 
+// uploadDatHandler は DAT ファイルのアップロードを処理
 func uploadDatHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
@@ -99,7 +101,6 @@ func uploadDatHandler(w http.ResponseWriter, r *http.Request) {
 
 	var all []model.DATRecord
 	var total, created, dup int
-
 	for _, fh := range files {
 		file, err := fh.Open()
 		if err != nil {
@@ -128,6 +129,7 @@ func uploadDatHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resp)
 }
 
+// uploadUsageHandler は USAGE ファイルのアップロードを処理
 func uploadUsageHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
@@ -173,6 +175,7 @@ func uploadUsageHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
+// autoLaunchBrowser は起動時にデフォルトブラウザでアプリを開く
 func autoLaunchBrowser(url string) {
 	var cmd string
 	var args []string
@@ -200,8 +203,12 @@ func main() {
 	}
 	defer db.Close()
 
-	// グローバル DB をセット
+	// global DB をセット
 	ma0.DB = db
+
+	// TANI マップを先にロードしておく
+	usage.LoadTaniMap()
+
 	aggregate.SetDB(db)
 
 	// スキーマ読み込み
@@ -213,7 +220,7 @@ func main() {
 		log.Fatalf("exec schema.sql error: %v", err)
 	}
 
-	// マスター CSV ロード
+	// マスター CSV をロード
 	if err := loadCSV(db, "SOU/JCSHMS.CSV", "jcshms", 125, false); err != nil {
 		log.Fatalf("load JCSHMS failed: %v", err)
 	}
@@ -224,7 +231,6 @@ func main() {
 	// 静的ファイル配信
 	staticFS := http.FileServer(http.Dir("./static"))
 	http.Handle("/static/", http.StripPrefix("/static/", staticFS))
-	// ルートでは index.html を返す
 	http.Handle("/", staticFS)
 
 	// API エンドポイント
