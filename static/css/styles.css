@@ -1,4 +1,4 @@
-/* すべての要素のマージン・パディングをリセット */
+/* リセット */
 * {
   margin: 0;
   padding: 0;
@@ -6,58 +6,98 @@
 }
 
 body {
-  /* フォントサイズに対しては何もしない */
   font-family: Arial, sans-serif;
+  background: #fafafa;
+  color: #333;
+  padding: 1em;
 }
 
-/* ヘッダー全体をstickyに */
+/* ヘッダー */
 #header {
   position: sticky;
   top: 0;
-  background-color: #f8f8f8;
+  background: #fff;
   border-bottom: 1px solid #ccc;
-  /* マージン・パディングは0ですが、最低高さだけは確保 */
-  min-height: 50px;
+}
+#header nav {
+  display: flex;
+  gap: 0.5em;
+  padding: 0.5em;
+}
+#header nav button {
+  background: #007bff;
+  color: #fff;
+  border: none;
+  padding: 0.5em 1em;
+  border-radius: 4px;
+  cursor: pointer;
+}
+#header nav button:hover {
+  background: #0056b3;
 }
 
-
-
-/* indicatorはheader内に配置 */
+/* インジケーター */
 #indicator {
-  background-color: #ddd;
-  border-bottom: 1px solid #aaa;
-  /* マージン、パディングは0 */
+  padding: 0.5em;
+  background: #e9ecef;
+  border-bottom: 1px solid #ccc;
+  font-size: 0.9em;
 }
 
-/* ナビゲーションボタン */
-nav button {
-  background-color: #007BFF;   /* 青い背景 */
-  color: #fff;                 /* 白い文字 */
-  padding: 10px 15px;          /* 上下に10px、左右に15pxの余白 */
-  border: none;                /* 境界線は無し */
-  border-radius: 4px;          /* 少し角を丸く */
-  font-size: 16px;             /* 読みやすいサイズ */
-  margin: 5px;                 /* 各ボタン間に5pxの間隔 */
-  cursor: pointer;             /* カーソルをポインターに */
-  transition: background-color 0.3s ease; /* ホバー時の背景色変化にスムーズなアニメーション */
+/* フィルタ部 */
+#aggregateFilter {
+  display: none;
+  margin: 1em 0;
+  padding: 1em;
+  background: #f5f5f5;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+.row {
+  margin-bottom: 0.8em;
+}
+.row label {
+  margin-right: 1em;
+  font-size: 0.9em;
+}
+.row input[type="date"],
+.row input[type="text"] {
+  padding: 0.3em;
+  font-size: 0.9em;
+  border: 1px solid #aaa;
+  border-radius: 4px;
+}
+.row input[type="checkbox"] {
+  transform: scale(1.1);
+  margin-right: 0.3em;
+}
+#executeAggregate {
+  background: #28a745;
+  color: #fff;
+  border: none;
+  padding: 0.5em 1em;
+  border-radius: 4px;
+  cursor: pointer;
+}
+#executeAggregate:hover {
+  background: #1e7e34;
 }
 
-nav button:hover {
-  background-color: #0056b3;   /* ホバー時の色を少し濃い青に */
-}
-
-
-/* 出力テーブル */
+/* テーブル */
 #outputTable {
   width: 100%;
   border-collapse: collapse;
-  /* マージン 0 */
+  margin-top: 1em;
 }
-
 #outputTable th,
 #outputTable td {
   border: 1px solid #ccc;
-  /* マージン、パディング 0 */
-  padding: 0;
-  text-align: left;
+  padding: 0.5em;
+  font-size: 0.9em;
+}
+#outputTable thead {
+  background: #e9ecef;
+}
+#outputTable tr:nth-child(even) td {
+  background: #f8f9fa;
 }

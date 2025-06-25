@@ -25,7 +25,6 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-// loadCSV は、Shift-JIS → UTF-8 変換しつつCSVを読み込み、指定テーブルに INSERT OR REPLACE する関数です。
 func loadCSV(db *sql.DB, filePath, table string, cols int, skipHeader bool) error {
 	f, err := os.Open(filePath)
 	if err != nil {
@@ -36,7 +35,6 @@ func loadCSV(db *sql.DB, filePath, table string, cols int, skipHeader bool) erro
 	rd := csv.NewReader(transform.NewReader(f, japanese.ShiftJIS.NewDecoder()))
 	rd.LazyQuotes = true
 	rd.FieldsPerRecord = -1
-
 	if skipHeader {
 		if _, err := rd.Read(); err != nil {
 			return err
@@ -57,7 +55,6 @@ func loadCSV(db *sql.DB, filePath, table string, cols int, skipHeader bool) erro
 	for i := range ph {
 		ph[i] = "?"
 	}
-
 	stmt, err := tx.Prepare(
 		"INSERT OR REPLACE INTO " + table + " VALUES(" + strings.Join(ph, ",") + ")",
 	)
@@ -85,8 +82,6 @@ func loadCSV(db *sql.DB, filePath, table string, cols int, skipHeader bool) erro
 	return tx.Commit()
 }
 
-// uploadDatHandler は /uploadDat エンドポイントです。
-// DAT ファイルを受け取り、dat.ParseDATFile でパースした結果を JSON で返します。
 func uploadDatHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
@@ -102,9 +97,8 @@ func uploadDatHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// ここでは、dat パッケージの DATRecord 型をそのまま利用します。
 	var all []model.DATRecord
-	total, created, dup := 0, 0, 0
+	var total, created, dup int
 
 	for _, fh := range files {
 		file, err := fh.Open()
@@ -112,9 +106,8 @@ func uploadDatHandler(w http.ResponseWriter, r *http.Request) {
 			log.Println("open DAT error:", err)
 			continue
 		}
-		defer file.Close()
-
 		recs, tc, mc, dc, err := dat.ParseDATFile(file)
+		file.Close()
 		if err != nil {
 			log.Println("parse DAT error:", err)
 			continue
@@ -122,7 +115,6 @@ func uploadDatHandler(w http.ResponseWriter, r *http.Request) {
 		total += tc
 		created += mc
 		dup += dc
-		// all は型 []dat.DATRecord として宣言しているため、recs をそのまま append 可能です。
 		all = append(all, recs...)
 	}
 
@@ -136,23 +128,15 @@ func uploadDatHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resp)
 }
 
-// uploadUsageHandler は、USAGE CSV ファイルを受け取り、
-// ファイル内の UsageDate の対象期間に該当する既存レコードを削除した後、
-// 新たにアップロードされた USAGE レコードを挿入し、結果を JSON で返します。
 func uploadUsageHandler(w http.ResponseWriter, r *http.Request) {
-	// POST メソッド以外は拒否
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
 		return
 	}
-
-	// マルチパートフォームをパース（最大 10 MB を想定）
 	if err := r.ParseMultipartForm(10 << 20); err != nil {
 		http.Error(w, "Error parsing form: "+err.Error(), http.StatusBadRequest)
 		return
 	}
-
-	// "usageFileInput[]" というキーに紐づくファイル群を取得
 	files := r.MultipartForm.File["usageFileInput[]"]
 	if len(files) == 0 {
 		http.Error(w, "No USAGE file uploaded", http.StatusBadRequest)
@@ -160,8 +144,6 @@ func uploadUsageHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var allRecords []usage.UsageRecord
-
-	// 各アップロードファイルを処理
 	for _, fh := range files {
 		file, err := fh.Open()
 		if err != nil {
@@ -169,7 +151,7 @@ func uploadUsageHandler(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		recs, err := usage.ParseUsageFile(file)
-		file.Close() // 明示的にクローズ
+		file.Close()
 		if err != nil {
 			log.Printf("Error parsing usage file %s: %v", fh.Filename, err)
 			continue
@@ -177,26 +159,20 @@ func uploadUsageHandler(w http.ResponseWriter, r *http.Request) {
 		allRecords = append(allRecords, recs...)
 	}
 
-	// ここで、usage.ReplaceUsageRecordsWithPeriod を呼び出して
-	// ファイル内の期間の既存レコードを削除し、新しいレコードを挿入する
 	if err := usage.ReplaceUsageRecordsWithPeriod(ma0.DB, allRecords); err != nil {
 		log.Printf("Failed to replace USAGE records: %v", err)
 		http.Error(w, "Failed to update USAGE records", http.StatusInternalServerError)
 		return
 	}
 
-	// 結果を JSON として返す
 	response := map[string]interface{}{
 		"TotalRecords": len(allRecords),
 		"USAGERecords": allRecords,
 	}
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		log.Printf("JSON encode error: %v", err)
-	}
+	json.NewEncoder(w).Encode(response)
 }
 
-// autoLaunchBrowser は、サーバ起動後にブラウザを自動オープンします。
 func autoLaunchBrowser(url string) {
 	var cmd string
 	var args []string
@@ -217,17 +193,18 @@ func autoLaunchBrowser(url string) {
 }
 
 func main() {
+	// SQLite DB を開く
 	db, err := sql.Open("sqlite3", "yamato.db")
 	if err != nil {
 		log.Fatalf("DB open error: %v", err)
 	}
 	defer db.Close()
 
-	// ma0 パッケージに DB をセット（MA0 連携用）
+	// グローバル DB をセット
 	ma0.DB = db
 	aggregate.SetDB(db)
 
-	// schema.sql を読み込み実行
+	// スキーマ読み込み
 	schema, err := os.ReadFile("schema.sql")
 	if err != nil {
 		log.Fatalf("read schema.sql error: %v", err)
@@ -236,7 +213,7 @@ func main() {
 		log.Fatalf("exec schema.sql error: %v", err)
 	}
 
-	// マスター CSV のロード
+	// マスター CSV ロード
 	if err := loadCSV(db, "SOU/JCSHMS.CSV", "jcshms", 125, false); err != nil {
 		log.Fatalf("load JCSHMS failed: %v", err)
 	}
@@ -244,8 +221,13 @@ func main() {
 		log.Fatalf("load JANCODE failed: %v", err)
 	}
 
-	// HTTP ルーティングの設定
-	http.Handle("/", http.FileServer(http.Dir("./static")))
+	// 静的ファイル配信
+	staticFS := http.FileServer(http.Dir("./static"))
+	http.Handle("/static/", http.StripPrefix("/static/", staticFS))
+	// ルートでは index.html を返す
+	http.Handle("/", staticFS)
+
+	// API エンドポイント
 	http.HandleFunc("/uploadDat", uploadDatHandler)
 	http.HandleFunc("/uploadUsage", uploadUsageHandler)
 	http.HandleFunc("/aggregate", aggregate.AggregateHandler)
