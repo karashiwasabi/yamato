@@ -13,7 +13,7 @@
       <button id="usageBtn">USAGE</button>
       <button id="aggregateBtn">集計</button>
     </nav>
-  </header>
+ 
 
   <!-- フィルタ部：最初は非表示 -->
   <div id="aggregateFilter">
@@ -34,12 +34,21 @@
       </div>
     </form>
   </div>
+   </header>
+
+ <!-- 隠しファイル入力 -->
+  <input type="file" id="datInput" style="display:none" multiple>
+  <input type="file" id="usageInput" style="display:none" multiple>
+
+
+
 
   <table id="outputTable">
     <thead></thead>
     <tbody></tbody>
   </table>
-
+  <script src="/static/js/dat.js"></script>
+  <script src="/static/js/usage.js"></script>
   <script src="/static/js/aggregate.js"></script>
 </body>
 </html>
