@@ -322,20 +322,30 @@ PRIMARY KEY(JA001JanCode)
 
 CREATE TABLE IF NOT EXISTS datrecords (
   CurrentOroshiCode         TEXT,
-  DatDate               TEXT,
-  DatDeliveryFlag       TEXT,
-  DatReceiptNumber      TEXT,
-  DatLineNumber         TEXT,
-  DatJanCode            TEXT,
-  DatProductName        TEXT,
-  DatQuantity           TEXT,
-  DatUnitPrice          TEXT,
-  DatSubtotal           TEXT,
-  DatPackagingDrugPrice TEXT,
-  DatExpiryDate         TEXT,
-  DatLotNumber          TEXT,
-  organizedFlag         INTEGER
+  DatDate                   TEXT,
+  DatDeliveryFlag           TEXT,
+  DatReceiptNumber          TEXT,
+  DatLineNumber             TEXT,
+  DatJanCode                TEXT,
+  DatProductName            TEXT,
+  DatQuantity               TEXT,
+  DatUnitPrice              TEXT,
+  DatSubtotal               TEXT,
+  DatPackagingDrugPrice     TEXT,
+  DatExpiryDate             TEXT,
+  DatLotNumber              TEXT,
+  organizedFlag             INTEGER,
+  PRIMARY KEY (
+    CurrentOroshiCode,
+    DatDeliveryFlag,
+    DatDate,
+    DatReceiptNumber,
+    DatLineNumber,
+    DatJanCode
+  )
 );
+
+
 
 
 

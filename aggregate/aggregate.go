@@ -4,7 +4,6 @@ package aggregate
 import (
 	"database/sql"
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
 	"sort"
@@ -14,24 +13,21 @@ import (
 	"YAMATO/usage"
 )
 
-// DB は main.go からセットされる DB ハンドル
 var DB *sql.DB
 
-// SetDB によって外部から DB を注入
 func SetDB(db *sql.DB) {
 	DB = db
 }
 
-// Detail は集計結果１行分を表す
 type Detail struct {
 	YJ            string `json:"yj"`
 	Date          string `json:"date"`
 	ProductName   string `json:"productName"`
 	Type          string `json:"type"`
-	Quantity      string `json:"quantity"` // HS×RawCount の計算結果 or USAGE数量
+	Quantity      string `json:"quantity"`
 	Unit          string `json:"unit"`
-	Packaging     string `json:"packaging"` // DAT包装文字列 or 空
-	Count         string `json:"count"`     // DATのRawCount or USAGE数量
+	Packaging     string `json:"packaging"`
+	Count         string `json:"count"`
 	UnitPrice     string `json:"unitPrice"`
 	Subtotal      string `json:"subtotal"`
 	ExpiryDate    string `json:"expiryDate"`
@@ -39,21 +35,22 @@ type Detail struct {
 	OroshiCode    string `json:"oroshiCode"`
 	ReceiptNumber string `json:"receiptNumber"`
 	LineNumber    string `json:"lineNumber"`
-
-	// JSONに含めない補助フィールド
-	RawCount string `json:"-"`
-	HK       string `json:"-"`
-	HS       string `json:"-"`
-	HU       string `json:"-"`
-	JSN      string `json:"-"`
-	JSU      string `json:"-"`
-	JSSN     string `json:"-"`
+	RawCount      string `json:"-"`
+	HK            string `json:"-"`
+	HS            string `json:"-"`
+	HU            string `json:"-"`
+	JSN           string `json:"-"`
+	JSU           string `json:"-"`
+	JSSN          string `json:"-"`
 }
 
-// AggregateHandler は GET /aggregate を処理し、DAT＋USAGE をマージして返す
 func AggregateHandler(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	fromRaw, toRaw := q.Get("from"), q.Get("to")
+	filter := strings.TrimSpace(q.Get("filter"))
+	log.Printf("▶ Aggregate from=%s to=%s filter=%q fullQuery=%s",
+		fromRaw, toRaw, filter, r.URL.RawQuery)
+
 	if fromRaw == "" || toRaw == "" {
 		http.Error(w, "from/to は必須です", http.StatusBadRequest)
 		return
@@ -61,29 +58,29 @@ func AggregateHandler(w http.ResponseWriter, r *http.Request) {
 	from := strings.ReplaceAll(fromRaw, "-", "")
 	to := strings.ReplaceAll(toRaw, "-", "")
 
-	// --- DAT レコード抽出 ---
-	args := []interface{}{from, to}
+	var details []Detail
+
+	// --- DAT抽出 ---
+	datArgs := []interface{}{from, to}
 	sb := &strings.Builder{}
 	sb.WriteString(`
 SELECT
-  COALESCE(m.MA009JC009YJCode,'')             AS yj,
-  d.DatDate                                   AS date,
-  COALESCE(m.MA018JC018ShouhinMei,'')          AS productName,
-  CASE d.DatDeliveryFlag
-    WHEN '1' THEN '納品'
-    WHEN '2' THEN '返品'
-    ELSE d.DatDeliveryFlag
-  END                                          AS type,
-  d.DatQuantity                               AS rawCount,
-  COALESCE(m.MA039JC039HousouTaniTani,'')      AS unit,
-  ''                                           AS packaging,
-  d.DatUnitPrice                              AS unitPrice,
-  d.DatSubtotal                               AS subtotal,
-  d.DatExpiryDate                             AS expiryDate,
-  d.DatLotNumber                              AS lotNumber,
-  d.CurrentOroshiCode                         AS oroshiCode,
-  d.DatReceiptNumber                          AS receiptNumber,
-  d.DatLineNumber                             AS lineNumber,
+  COALESCE(m.MA009JC009YJCode,'') AS yj,
+  d.DatDate AS date,
+  COALESCE(m.MA018JC018ShouhinMei,'') AS productName,
+  CASE d.DatDeliveryFlag WHEN '1' THEN '納品'
+                        WHEN '2' THEN '返品'
+                        ELSE d.DatDeliveryFlag END AS type,
+  d.DatQuantity AS rawCount,
+  COALESCE(m.MA039JC039HousouTaniTani,'') AS unit,
+  '' AS packaging,
+  d.DatUnitPrice AS unitPrice,
+  d.DatSubtotal  AS subtotal,
+  d.DatExpiryDate AS expiryDate,
+  d.DatLotNumber  AS lotNumber,
+  d.CurrentOroshiCode AS oroshiCode,
+  d.DatReceiptNumber  AS receiptNumber,
+  d.DatLineNumber     AS lineNumber,
   COALESCE(m.MA037JC037HousouKeitai,'')        AS hk,
   COALESCE(m.MA044JC044HousouSouryouSuuchi,'') AS hs,
   COALESCE(m.MA039JC039HousouTaniTani,'')      AS hu,
@@ -93,11 +90,13 @@ SELECT
 FROM datrecords d
 LEFT JOIN ma0 m ON d.DatJanCode = m.MA000JC000JanCode
 WHERE d.DatDate BETWEEN ? AND ?`)
-	// 各種フィルタ条件
-	if v := q.Get("filter"); v != "" {
+
+	// テキストフィルタ
+	if filter != "" {
 		sb.WriteString(" AND m.MA018JC018ShouhinMei LIKE ?")
-		args = append(args, "%"+v+"%")
+		datArgs = append(datArgs, "%"+filter+"%")
 	}
+	// チェックボックスフィルタ
 	if q.Get("doyaku") == "1" {
 		sb.WriteString(" AND m.MA061JC061Doyaku='1'")
 	}
@@ -114,25 +113,23 @@ WHERE d.DatDate BETWEEN ? AND ?`)
 		sb.WriteString(" AND m.MA066JC066KakuseizaiGenryou='1'")
 	}
 	if ks := q.Get("kouseishinyaku"); ks != "" {
-		codes := strings.Split(ks, ",")
-		ph := make([]string, len(codes))
-		for i, c := range codes {
+		parts := strings.Split(ks, ",")
+		ph := make([]string, len(parts))
+		for i, v := range parts {
 			ph[i] = "?"
-			args = append(args, c)
+			datArgs = append(datArgs, v)
 		}
 		sb.WriteString(" AND m.MA064JC064Kouseishinyaku IN(" + strings.Join(ph, ",") + ")")
 	}
 
-	queryDAT := sb.String()
-	rows, err := DB.Query(queryDAT, args...)
+	datQuery := sb.String()
+	log.Printf("▶ DAT SQL: %s\n   args=%v", datQuery, datArgs)
+	rows, err := DB.Query(datQuery, datArgs...)
 	if err != nil {
-		log.Println("DAT query error:", err)
 		http.Error(w, "DBエラー(DAT)", http.StatusInternalServerError)
 		return
 	}
 	defer rows.Close()
-
-	var details []Detail
 	for rows.Next() {
 		var d Detail
 		if err := rows.Scan(
@@ -142,70 +139,85 @@ WHERE d.DatDate BETWEEN ? AND ?`)
 			&d.LotNumber, &d.OroshiCode, &d.ReceiptNumber, &d.LineNumber,
 			&d.HK, &d.HS, &d.HU, &d.JSN, &d.JSU, &d.JSSN,
 		); err != nil {
-			log.Println("scan DAT row error:", err)
 			continue
 		}
-		// DAT 数量計算
 		hsVal, _ := strconv.Atoi(strings.TrimLeft(d.HS, "0"))
 		rcVal, _ := strconv.Atoi(strings.TrimLeft(d.RawCount, "0"))
-		d.Quantity = fmt.Sprintf("%d", hsVal*rcVal)
+		d.Quantity = strconv.Itoa(hsVal * rcVal)
 		d.Count = d.RawCount
-		// 包装文字列組み立て
-		outer := d.HK + d.HS + d.HU
 		inner := d.JSN + d.HU + "×" + d.JSSN
 		if d.JSU != "" && d.JSU != "0" {
-			if extra := usage.GetTaniName(d.JSU); extra != "" {
-				inner += extra
+			if nm := usage.GetTaniName(d.JSU); nm != "" {
+				inner += nm
 			}
 		}
-		d.Packaging = outer + "(" + inner + ")"
-
+		d.Packaging = d.HK + d.HS + d.HU + "(" + inner + ")"
 		details = append(details, d)
 	}
 
-	// --- USAGE（処方）レコード抽出 ---
-	usageSQL := `
+	// --- USAGE抽出（DATと同じチェックボックス条件を適用） ---
+	uArgs := []interface{}{from, to}
+	ub := &strings.Builder{}
+	ub.WriteString(`
 SELECT
-  usageDate,      -- 日付
-  usageYjCode,    -- YJコード
-  usageAmount,    -- 数量
-  usageUnit,      -- 単位コード
-  usageUnitName,  -- 単位名称
-  usageJanCode,   -- JANコード
-  organizedFlag   -- 整理フラグ
-FROM usagerecords
-WHERE usageDate BETWEEN ? AND ?
-`
-	rowsU, err := DB.Query(usageSQL, from, to)
-	if err != nil {
-		log.Println("USAGE query error:", err)
-	} else {
+  u.usageDate,
+  u.usageYjCode,
+  u.usageJanCode,
+  COALESCE(m.MA018JC018ShouhinMei,'') AS productName,
+  u.usageAmount,
+  u.usageUnitName
+FROM usagerecords u
+LEFT JOIN ma0 m ON u.usageJanCode = m.MA000JC000JanCode
+WHERE u.usageDate BETWEEN ? AND ?`)
+
+	// 同じチェックボックス
+	if filter != "" {
+		ub.WriteString(" AND m.MA018JC018ShouhinMei LIKE ?")
+		uArgs = append(uArgs, "%"+filter+"%")
+	}
+	if q.Get("doyaku") == "1" {
+		ub.WriteString(" AND m.MA061JC061Doyaku='1'")
+	}
+	if q.Get("gekiyaku") == "1" {
+		ub.WriteString(" AND m.MA062JC062Gekiyaku='1'")
+	}
+	if q.Get("mayaku") == "1" {
+		ub.WriteString(" AND m.MA063JC063Mayaku='1'")
+	}
+	if q.Get("kakuseizai") == "1" {
+		ub.WriteString(" AND m.MA065JC065Kakuseizai='1'")
+	}
+	if q.Get("kakuseizaiGenryou") == "1" {
+		ub.WriteString(" AND m.MA066JC066KakuseizaiGenryou='1'")
+	}
+	if ks := q.Get("kouseishinyaku"); ks != "" {
+		parts := strings.Split(ks, ",")
+		ph := make([]string, len(parts))
+		for i, v := range parts {
+			ph[i] = "?"
+			uArgs = append(uArgs, v)
+		}
+		ub.WriteString(" AND m.MA064JC064Kouseishinyaku IN(" + strings.Join(ph, ",") + ")")
+	}
+
+	usageQuery := ub.String()
+	log.Printf("▶ USAGE SQL: %s\n   args=%v", usageQuery, uArgs)
+	rowsU, err := DB.Query(usageQuery, uArgs...)
+	if err == nil {
 		defer rowsU.Close()
 		for rowsU.Next() {
-			var date, yj, amt, unitCode, unitName, jan string
-			var flag int
-			if err := rowsU.Scan(&date, &yj, &amt, &unitCode, &unitName, &jan, &flag); err != nil {
-				log.Println("scan USAGE row error:", err)
+			var d Detail
+			var date, yj, jan, pname, amt, unitName string
+			if err := rowsU.Scan(&date, &yj, &jan, &pname, &amt, &unitName); err != nil {
 				continue
 			}
-			// Detail にマッピング
-			d := Detail{
-				YJ:            yj,
-				Date:          date,
-				ProductName:   "",   // 集計画面では「処方」固定でも可
-				Type:          "処方", // 種類
-				Quantity:      amt,
-				Unit:          unitName,
-				Packaging:     "",
-				Count:         "",
-				UnitPrice:     "",
-				Subtotal:      "",
-				ExpiryDate:    "",
-				LotNumber:     "",
-				OroshiCode:    "",
-				ReceiptNumber: "",
-				LineNumber:    "",
-			}
+			d.YJ = yj
+			d.Date = date
+			d.ProductName = pname
+			d.Type = "処方"
+			d.Quantity = amt
+			d.Unit = unitName
+			d.Count = ""
 			details = append(details, d)
 		}
 	}
@@ -215,16 +227,11 @@ WHERE usageDate BETWEEN ? AND ?
 	for _, d := range details {
 		groups[d.YJ] = append(groups[d.YJ], d)
 	}
-	for yj, list := range groups {
-		sort.Slice(list, func(i, j int) bool {
-			return list[i].Date < list[j].Date
-		})
-		groups[yj] = list
+	for k, list := range groups {
+		sort.Slice(list, func(i, j int) bool { return list[i].Date < list[j].Date })
+		groups[k] = list
 	}
 
-	// JSON 出力
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	if err := json.NewEncoder(w).Encode(groups); err != nil {
-		log.Println("JSON encode error:", err)
-	}
+	json.NewEncoder(w).Encode(groups)
 }
