@@ -12,6 +12,20 @@ body {
   padding: 1em;
 }
 
+/* 共通ボタン */
+.btn {
+  background: #007bff;
+  color: #fff;
+  border: none;
+  padding: 0.5em 1em;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9em;
+}
+.btn:hover {
+  background: #0056b3;
+}
+
 /* ヘッダー */
 #header {
   position: sticky;
@@ -23,17 +37,6 @@ body {
   display: flex;
   gap: 0.5em;
   padding: 0.5em;
-}
-#header nav button {
-  background: #007bff;
-  color: #fff;
-  border: none;
-  padding: 0.5em 1em;
-  border-radius: 4px;
-  cursor: pointer;
-}
-#header nav button:hover {
-  background: #0056b3;
 }
 
 /* インジケーター */
@@ -54,10 +57,13 @@ body {
   border-radius: 4px;
 }
 .row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5em;
   margin-bottom: 0.8em;
 }
 .row label {
-  margin-right: 1em;
   font-size: 0.9em;
 }
 .row input[type="date"],
@@ -66,21 +72,11 @@ body {
   font-size: 0.9em;
   border: 1px solid #aaa;
   border-radius: 4px;
+  min-width: 8em;
 }
 .row input[type="checkbox"] {
   transform: scale(1.1);
   margin-right: 0.3em;
-}
-#executeAggregate {
-  background: #28a745;
-  color: #fff;
-  border: none;
-  padding: 0.5em 1em;
-  border-radius: 4px;
-  cursor: pointer;
-}
-#executeAggregate:hover {
-  background: #1e7e34;
 }
 
 /* テーブル */
@@ -100,4 +96,25 @@ body {
 }
 #outputTable tr:nth-child(even) td {
   background: #f8f9fa;
+}
+
+/* 印刷 */
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 10mm;
+  }
+  body * {
+    visibility: hidden;
+  }
+  #outputTable,
+  #outputTable * {
+    visibility: visible;
+  }
+  #outputTable {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+  }
 }

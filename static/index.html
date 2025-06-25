@@ -9,44 +9,49 @@
   <header id="header">
     <div id="indicator"></div>
     <nav>
-      <button id="datBtn">DAT</button>
-      <button id="usageBtn">USAGE</button>
-      <button id="aggregateBtn">集計</button>
+      <button id="datBtn"      class="btn">DAT</button>
+      <button id="usageBtn"    class="btn">USAGE</button>
+      <button id="aggregateBtn"class="btn">集計</button>
     </nav>
- 
 
-  <!-- フィルタ部：最初は非表示 -->
-  <div id="aggregateFilter">
-    <form id="filterForm">
-      <div class="row">
-        <label for="fromDate">開始日:</label><input type="date" id="fromDate" name="from" required>
-        <label for="toDate">終了日:</label><input type="date" id="toDate" name="to" required>
-        <label for="filterText">商品名フィルタ:</label><input type="text" id="filterText" name="filter" placeholder="部分一致OK">
-        <label><input type="checkbox" id="doyaku"        name="doyaku"        value="1">毒薬</label>
-        <label><input type="checkbox" id="gekiyaku"      name="gekiyaku"      value="1">劇薬</label>
-        <label><input type="checkbox" id="mayaku"        name="mayaku"        value="1">麻薬</label>
-        <label><input type="checkbox" id="kousei1"       name="kouseishinyaku" value="1">向1</label>
-        <label><input type="checkbox" id="kousei2"       name="kouseishinyaku" value="2">向2</label>
-        <label><input type="checkbox" id="kousei3"       name="kouseishinyaku" value="3">向3</label>
-        <label><input type="checkbox" id="kakuseizai"    name="kakuseizai"    value="1">覚せい剤</label>
-        <label><input type="checkbox" id="kakuseizaiRaw" name="kakuseizaiGenryou" value="1">覚せい剤原料</label>
-      <button type="submit" id="executeAggregate">実行</button>
-      </div>
-    </form>
-  </div>
-   </header>
+    <!-- フィルタ部 -->
+    <div id="aggregateFilter">
+      <form id="filterForm">
+        <div class="row">
+          <button type="button" id="printTable" class="btn">印刷</button>
 
- <!-- 隠しファイル入力 -->
-  <input type="file" id="datInput" style="display:none" multiple>
+          <label for="fromDate">開始日:</label>
+          <input type="date" id="fromDate" name="from" required>
+
+          <label for="toDate">終了日:</label>
+          <input type="date" id="toDate" name="to" required>
+
+          <label for="filterText">商品名フィルタ:</label>
+          <input type="text" id="filterText" name="filter" placeholder="部分一致OK">
+
+          <label><input type="checkbox" id="doyaku" name="doyaku" value="1">毒薬</label>
+          <label><input type="checkbox" id="gekiyaku" name="gekiyaku" value="1">劇薬</label>
+          <label><input type="checkbox" id="mayaku" name="mayaku" value="1">麻薬</label>
+          <label><input type="checkbox" id="kousei1" name="kouseishinyaku" value="1">向1</label>
+          <label><input type="checkbox" id="kousei2" name="kouseishinyaku" value="2">向2</label>
+          <label><input type="checkbox" id="kousei3" name="kouseishinyaku" value="3">向3</label>
+          <label><input type="checkbox" id="kakuseizai" name="kakuseizai" value="1">覚せい剤</label>
+          <label><input type="checkbox" id="kakuseizaiGenryou" name="kakuseizaiGenryou" value="1">覚せい剤原料</label>
+
+          <button type="submit" id="executeAggregate" class="btn">実行</button>
+        </div>
+      </form>
+    </div>
+  </header>
+
+  <input type="file" id="datInput"   style="display:none" multiple>
   <input type="file" id="usageInput" style="display:none" multiple>
-
-
-
 
   <table id="outputTable">
     <thead></thead>
     <tbody></tbody>
   </table>
+
   <script src="/static/js/dat.js"></script>
   <script src="/static/js/usage.js"></script>
   <script src="/static/js/aggregate.js"></script>
