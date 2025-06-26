@@ -18,6 +18,7 @@ import (
 
 	"YAMATO/aggregate"
 	"YAMATO/dat"
+	"YAMATO/inventory"
 	"YAMATO/ma0"
 	"YAMATO/model"
 	"YAMATO/usage"
@@ -195,6 +196,50 @@ func autoLaunchBrowser(url string) {
 	}
 }
 
+func uploadInventoryHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	file, _, err := r.FormFile("inventoryFile")
+	if err != nil {
+		http.Error(w, "ファイルが指定されていません", http.StatusBadRequest)
+		return
+	}
+	defer file.Close()
+
+	recs, err := inventory.ParseInventoryCSV(file)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// DB に UPSERT するときの product_name を決める
+	for _, rec := range recs {
+		// MA0 名があればそれを、なければ CSV 名を使う
+		prodName := rec.MA0Name
+		if prodName == "" {
+			prodName = rec.CSVName
+		}
+
+		_, err := ma0.DB.Exec(
+			`INSERT OR REPLACE INTO inventory
+               (inv_date, jan_code, product_name, qty, unit)
+             VALUES (?, ?, ?, ?, ?)`,
+			rec.Date, rec.JAN, prodName, rec.Qty, rec.Unit,
+		)
+		if err != nil {
+			log.Printf("inventory upsert error: %v", err)
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"count":       len(recs),
+		"inventories": recs, // rec.MA0Name／rec.CSVName が JSON に含まれます
+	})
+}
+
 func main() {
 	// SQLite DB を開く
 	db, err := sql.Open("sqlite3", "yamato.db")
@@ -238,6 +283,7 @@ func main() {
 	http.HandleFunc("/uploadUsage", uploadUsageHandler)
 	http.HandleFunc("/aggregate", aggregate.AggregateHandler)
 	http.HandleFunc("/productName", productNameHandler)
+	http.HandleFunc("/uploadInventory", uploadInventoryHandler)
 
 	// 自動ブラウザ起動
 	go autoLaunchBrowser("http://localhost:8080")

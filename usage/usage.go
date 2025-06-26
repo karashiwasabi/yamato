@@ -1,4 +1,4 @@
-// File: usage/usage.go
+// File: YAMATO/usage/usage.go
 package usage
 
 import (
@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"strconv"
 	"strings"
 
 	"YAMATO/jcshms"
@@ -18,7 +19,7 @@ import (
 	"golang.org/x/text/transform"
 )
 
-// UsageRecord はUSAGE CSVの1行分のデータを表します。
+// UsageRecord は USAGE CSV の１行分を表します。
 type UsageRecord struct {
 	UsageDate        string `json:"usageDate"`
 	UsageYjCode      string `json:"usageYjCode"`
@@ -27,41 +28,33 @@ type UsageRecord struct {
 	UsageAmount      string `json:"usageAmount"`
 	UsageUnit        string `json:"usageUnit"`
 	UsageUnitName    string `json:"usageUnitName"`
-	OrganizedFlag    int    `json:"organizedFlag"` // 1: organized, 0: disorganized
+	OrganizedFlag    int    `json:"organizedFlag"`
 }
 
-// taniMap はコード→単位名称を保持します（Shift-JIS CSVからロード）。
 var taniMap map[string]string
 
-// loadTaniMap は内部用。TANI CSVを読み込み、taniMapを初期化します。
+// loadTaniMap は内部用：TANI.CSV を読み込んで taniMap を初期化します。
 func loadTaniMap() {
 	if taniMap != nil {
 		return
 	}
 	f, err := os.Open("C:\\Dev\\YAMATO\\SOU\\TANI.CSV")
 	if err != nil {
-		log.Printf("TANIファイルオープンエラー: %v", err)
+		log.Printf("TANI file open error: %v", err)
 		taniMap = make(map[string]string)
 		return
 	}
 	defer f.Close()
-
 	m, err := tani.ParseTANI(f)
 	if err != nil {
-		log.Printf("TANIパース失敗: %v", err)
+		log.Printf("TANI parse error: %v", err)
 		taniMap = make(map[string]string)
 		return
 	}
 	taniMap = m
 }
 
-// LoadTaniMap は外部からTANIマップを初期化するための公開関数です。
-func LoadTaniMap() {
-	loadTaniMap()
-}
-
-// GetTaniName はコードをキーに単位名称を返します。
-// マップ未初期化時は自動でロードします。
+// GetTaniName は単位コードから単位名称を返します。
 func GetTaniName(code string) string {
 	if taniMap == nil {
 		loadTaniMap()
@@ -72,22 +65,23 @@ func GetTaniName(code string) string {
 	return ""
 }
 
-// getOrganizedFlag はJCShmsマスターにJANが存在すれば1、なければ0を返します。
-func getOrganizedFlag(jan string) (int, error) {
-	records, err := jcshms.QueryByJan(ma0.DB, jan)
+// getOrganizedFlag は JCShms マスターに JAN があれば1、なければ0を返します。
+func getOrganizedFlag(jan string) int {
+	recs, err := jcshms.QueryByJan(ma0.DB, jan)
 	if err != nil {
-		return 0, fmt.Errorf("jcshms.QueryByJan error: %w", err)
+		log.Printf("[USAGE] OrganizedFlag error JAN=%q: %v", jan, err)
+		return 0
 	}
-	if len(records) > 0 {
-		return 1, nil
+	if len(recs) > 0 {
+		return 1
 	}
-	return 0, nil
+	return 0
 }
 
-// ParseUsageFile は Shift-JIS の USAGE CSVをパースし、UsageRecordスライスを返します。
-// 各レコードで単位名称を解決し、整理フラグをセットします。
+// ParseUsageFile は SHIFT-JIS USAGE CSV を読み込み、UsageRecord スライスを返します。
+// MA0 未登録品は MA2 テーブルに登録します。
 func ParseUsageFile(r io.Reader) ([]UsageRecord, error) {
-	loadTaniMap() // 念のため
+	loadTaniMap()
 	decoder := japanese.ShiftJIS.NewDecoder()
 	scanner := bufio.NewScanner(transform.NewReader(r, decoder))
 
@@ -96,17 +90,13 @@ func ParseUsageFile(r io.Reader) ([]UsageRecord, error) {
 
 	for scanner.Scan() {
 		line := scanner.Text()
-		// ヘッダー行をスキップ
 		if !headerSkipped {
-			if strings.Contains(line, "UsageDate") {
-				headerSkipped = true
-				continue
-			}
 			headerSkipped = true
+			continue
 		}
 		fields := strings.Split(line, ",")
 		if len(fields) < 6 {
-			log.Printf("[USAGE] フィールド数不足をスキップ: %v", fields)
+			log.Printf("[USAGE] skip short row: %v", fields)
 			continue
 		}
 		for i := range fields {
@@ -121,47 +111,57 @@ func ParseUsageFile(r io.Reader) ([]UsageRecord, error) {
 			UsageAmount:      fields[4],
 			UsageUnit:        fields[5],
 		}
-
-		// 単位名称解決
-		if name := GetTaniName(ur.UsageUnit); name != "" {
-			ur.UsageUnitName = name
+		// 単位名称
+		if nm := GetTaniName(ur.UsageUnit); nm != "" {
+			ur.UsageUnitName = nm
 		} else {
 			ur.UsageUnitName = ur.UsageUnit
 		}
+		// organizedFlag
+		ur.OrganizedFlag = getOrganizedFlag(ur.UsageJanCode)
 
-		// 整理フラグ判定
-		flag, err := getOrganizedFlag(ur.UsageJanCode)
-		if err != nil {
-			log.Printf("[USAGE] Organized flag確認エラー (JAN=%q): %v", ur.UsageJanCode, err)
-			ur.OrganizedFlag = 0
-		} else {
-			ur.OrganizedFlag = flag
+		// MA0 連携／MA2 登録
+		ma0Rec, created, err0 := ma0.CheckOrCreateMA0(ur.UsageJanCode)
+		if err0 != nil {
+			log.Printf("[USAGE] MA0 lookup error JAN=%s: %v", ur.UsageJanCode, err0)
+		}
+		if created {
+			// 新規 MA0 作成は別でカウント
+		}
+		if !created && ma0Rec.MA018JC018ShouhinMei == "" {
+			hs, _ := strconv.Atoi(ma0Rec.MA044JC044HousouSouryouSuuchi)
+			jsn, _ := strconv.Atoi(ma0Rec.MA131JA006HousouSuuryouSuuchi)
+			jssn, _ := strconv.Atoi(ma0Rec.MA133JA008HousouSouryouSuuchi)
+			maRec := &ma0.MARecord{
+				JanCode:                ur.UsageJanCode,
+				ProductName:            ur.UsageProductName,
+				HousouKeitai:           ma0Rec.MA037JC037HousouKeitai,
+				HousouTaniUnit:         ma0Rec.MA038JC038HousouTaniSuuchi,
+				HousouSouryouNumber:    hs,
+				JanHousouSuuryouNumber: jsn,
+				JanHousouSuuryouUnit:   ma0Rec.MA132JA007HousouSuuryouTaniCode,
+				JanHousouSouryouNumber: jssn,
+			}
+			if err2 := ma0.RegisterMA(ma0.DB, maRec); err2 != nil {
+				log.Printf("[USAGE] MA2 registration error JAN=%s: %v", ur.UsageJanCode, err2)
+			}
 		}
 
 		records = append(records, ur)
-
-		// MA0 連携
-		dataSlice := []string{
-			ur.UsageDate,
-			ur.UsageYjCode,
-			ur.UsageJanCode,
-			ur.UsageProductName,
-			ur.UsageAmount,
-			ur.UsageUnit,
-			ur.UsageUnitName,
-		}
-		if err := ma0.ProcessMA0Record(dataSlice); err != nil {
-			log.Printf("[USAGE] MA0照合エラー (JAN=%q): %v", ur.UsageJanCode, err)
-		}
 	}
-
 	if err := scanner.Err(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("USAGE scan error: %w", err)
 	}
 	return records, nil
 }
 
-// ReplaceUsageRecordsWithPeriod は指定期間の既存レコードを削除後、新規挿入します。
+// LoadTaniMap は main.go から呼ばれる公開版です。
+func LoadTaniMap() {
+	loadTaniMap()
+}
+
+// ReplaceUsageRecordsWithPeriod は main.go から呼ばれる公開版です。
+// 指定期間の USAGE レコードを削除し、再挿入します。
 func ReplaceUsageRecordsWithPeriod(db *sql.DB, recs []UsageRecord) error {
 	if len(recs) == 0 {
 		return nil
@@ -175,25 +175,23 @@ func ReplaceUsageRecordsWithPeriod(db *sql.DB, recs []UsageRecord) error {
 			end = r.UsageDate
 		}
 	}
-
-	_, err := db.Exec(`DELETE FROM usagerecords WHERE usageDate BETWEEN ? AND ?`, start, end)
-	if err != nil {
-		return fmt.Errorf("failed to delete existing usage records: %w", err)
+	if _, err := db.Exec(
+		`DELETE FROM usagerecords WHERE usageDate BETWEEN ? AND ?`,
+		start, end,
+	); err != nil {
+		return fmt.Errorf("delete existing USAGE error: %w", err)
 	}
-
-	// 挿入
-	stmt := `
-INSERT OR REPLACE INTO usagerecords (
-  usageDate, usageYjCode, usageJanCode,
-  usageProductName, usageAmount, usageUnit, usageUnitName, organizedFlag
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-`
+	stmt := `INSERT OR REPLACE INTO usagerecords (
+      usageDate, usageYjCode, usageJanCode,
+      usageProductName, usageAmount, usageUnit, usageUnitName, organizedFlag
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
 	for _, r := range recs {
 		if _, err := db.Exec(stmt,
 			r.UsageDate, r.UsageYjCode, r.UsageJanCode,
-			r.UsageProductName, r.UsageAmount, r.UsageUnit, r.UsageUnitName, r.OrganizedFlag,
+			r.UsageProductName, r.UsageAmount, r.UsageUnit,
+			r.UsageUnitName, r.OrganizedFlag,
 		); err != nil {
-			return fmt.Errorf("failed to insert USAGE record: %w", err)
+			return fmt.Errorf("insert USAGE record error: %w", err)
 		}
 	}
 	return nil

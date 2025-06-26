@@ -316,18 +316,6 @@ func CheckOrCreateMA0(jan string) (MA0Record, bool, error) {
 	return rec, true, nil
 }
 
-// ProcessMA0Record は、dat.go や usage.go から呼び出され、
-// 与えられたデータスライスから JAN コードを抽出して CheckOrCreateMA0 を実行します。
-// ※ data の 3 番目の要素（インデックス2）が JAN コードであるという慣例に従います。
-func ProcessMA0Record(data []string) error {
-	if len(data) < 3 {
-		return fmt.Errorf("insufficient fields: %v", data)
-	}
-	jan := data[2]
-	_, _, err := CheckOrCreateMA0(jan)
-	return err
-}
-
 // InsertDATRecord は、与えられた model.DATRecord を datrecords テーブルに挿入します。
 // organizedFlag には、1 (organized) または 0 (disorganized) を指定します。
 func InsertDATRecord(db *sql.DB, rec model.DATRecord, organizedFlag int) error {

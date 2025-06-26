@@ -361,3 +361,40 @@ CREATE TABLE IF NOT EXISTS usagerecords (
     PRIMARY KEY (usageDate, usageYjCode, usageJanCode)
 );
 
+CREATE TABLE IF NOT EXISTS inventory (
+  inv_date     TEXT    NOT NULL,  -- YYYYMMDD
+  jan_code     TEXT    NOT NULL,  -- JANコード
+  product_name TEXT    NOT NULL,  -- 商品名
+  qty          INTEGER NOT NULL,  -- 在庫数
+  unit         TEXT    NOT NULL,  -- 単位
+  PRIMARY KEY(inv_date, jan_code)
+);
+
+-- =========================================
+-- MA2 テーブル定義
+-- =========================================
+DROP TABLE IF EXISTS ma2;
+CREATE TABLE ma2 (
+  MA2JanCode                TEXT    PRIMARY KEY,  -- 0: JANコード（MA2 用自動採番結果）
+  MA2YjCode                 TEXT,               -- 9: YJコード（MA2 用自動採番結果）
+  Shouhinmei                TEXT,               -- 18: 商品名
+  HousouKeitai              TEXT,               -- 37: 包装形態
+  HousouTaniUnit            TEXT,               -- 38: 包装単位コード
+  HousouSouryouNumber       INTEGER,            -- 44: 包装数量
+  JanHousouSuuryouNumber    INTEGER,            -- 131: JAN包装数量
+  JanHousouSuuryouUnit      TEXT,               -- 132: JAN包装単位コード
+  JanHousouSouryouNumber    INTEGER             -- 133: JAN包装形態別数量
+);
+
+-- =========================================
+-- シーケンス管理用テーブル追加
+-- =========================================
+CREATE TABLE IF NOT EXISTS code_sequences (
+  name    TEXT    PRIMARY KEY,  -- 'MA1Y','MA2Y','MA2J'
+  last_no INTEGER NOT NULL      -- 最終発番番号
+);
+
+-- 初期レコード（すでに存在する場合は無視）
+INSERT OR IGNORE INTO code_sequences(name, last_no) VALUES
+  ('MA2Y', 0),
+  ('MA2J', 0);
