@@ -115,33 +115,79 @@ tr:nth-child(even) td {
   }
 }
 
-/* ================================== */
-/* MA2編集用ヘッダー＋スクロール分割 */
-/* ================================== */
+/* ============================= */
+/* MA2編集用グリッドレイアウト */
+/* ============================= */
+
+/* コンテナ全体 */
 .ma2-editor {
+  display: none;       /* 初期は非表示。JSで切り替え */
   margin-top: 1em;
-}
-/* ヘッダー用テーブル */
-#ma2Header {
   width: 100%;
-  border-collapse: collapse;
+  box-sizing: border-box;
 }
-/* ヘッダーの見出しセル */
-#ma2Header th {
+
+/* ヘッダー行・データ行を共通の grid レイアウトに */
+.ma2-editor .ma2-grid {
+  display: grid;
+  grid-template-columns:
+    1.5fr  /* JANコード */
+    1fr    /* YJコード */
+    2fr    /* 商品名 */
+    1fr    /* 包装形態 */
+    1fr    /* 包装単位 */
+    1fr    /* 包装総量 */
+    1fr    /* JAN包装数量 */
+    1fr    /* JAN包装数量単位 */
+    1fr    /* JAN包装総量 */
+    auto;  /* 操作 (ボタン) */
+  box-sizing: border-box;
+}
+
+/* ── ヘッダー行 ── */
+.ma2-editor .ma2-grid.header {
+  position: sticky;
+  top: 0;
   background: #f0f0f0;
-  z-index: 2;
+  z-index: 1;
 }
-/* ボディ部分をスクロール */
-.ma2-body {
-  max-height: 80vh;   /* お好みで調整 */
+.ma2-editor .ma2-grid.header > div {
+  border: 1px solid #ccc;
+  padding: 0.5em;
+  font-weight: bold;
+  box-sizing: border-box;
+}
+
+/* ── データ行群 ── */
+.ma2-editor .ma2-grid.body {
+  max-height: 60vh;    /* 必要に応じて調整 */
   overflow-y: auto;
 }
-/* ボディ用テーブル */
-#ma2Body {
-  width: 100%;
-  border-collapse: collapse;
+
+/* 各行（.row）の要素をそのままグリッドセル化 */
+.ma2-editor .ma2-grid.body .row {
+  display: contents;
 }
-/* ボディのセル */
-#ma2Body td {
+
+/* データセル共通スタイル */
+.ma2-editor .ma2-grid.body .row > * {
+  border: 1px solid #ccc;
+  padding: 0.4em;
   background: #fff;
+  box-sizing: border-box;
 }
+
+/* 編集可能フィールドは幅100% */
+.ma2-editor .ma2-grid.body .row input,
+.ma2-editor .ma2-grid.body .row select {
+  width: 100%;
+  border: none;
+  outline: none;
+}
+
+/* 操作ボタンの余白調整 */
+.ma2-editor .ma2-grid.body .row button {
+  margin: 0;
+  white-space: nowrap;
+}
+

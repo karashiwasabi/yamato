@@ -1,7 +1,7 @@
 // static/js/ma2.js
 
 (() => {
-  // 1) サーバーから TANI マップを取得
+  // ── 1) サーバーから単位マップを取得 ──
   let taniMap = {};
   fetch("/api/tani")
     .then(res => res.json())
@@ -9,13 +9,12 @@
     .catch(err => console.error("TANI取得失敗:", err));
 
   document.addEventListener("DOMContentLoaded", () => {
-    const ma2Btn      = document.getElementById("ma2Btn");
-    const outputTable = document.getElementById("outputTable");
-    const editor      = document.querySelector(".ma2-editor");
-    const headerThead = document.querySelector("#ma2Header thead");
-    const bodyTbody   = document.querySelector("#ma2Body tbody");
+    const ma2Btn     = document.getElementById("ma2Btn");
+    const editor     = document.querySelector(".ma2-editor");
+    const headerGrid = document.querySelector(".ma2-grid.header");
+    const bodyGrid   = document.querySelector(".ma2-grid.body");
 
-    // 管理する列キーと見出し
+    // 管理するフィールドキーと見出し
     const COLUMNS = [
       "janCode",
       "yjCode",
@@ -40,32 +39,30 @@
       "操作"
     ];
 
-    // ヘッダーを描画
+    // ── ヘッダー行を描画 ──
     function renderHeader() {
-      headerThead.innerHTML = "";
-      const tr = document.createElement("tr");
-      HEADERS.forEach(h => {
-        const th = document.createElement("th");
-        th.textContent = h;
-        tr.appendChild(th);
+      headerGrid.innerHTML = "";
+      HEADERS.forEach(text => {
+        const cell = document.createElement("div");
+        cell.textContent = text;
+        cell.className = "header-cell";
+        headerGrid.appendChild(cell);
       });
-      headerThead.appendChild(tr);
     }
 
-    // 1行分の<tr>要素を生成
+    // ── 1レコード分の行を作る ──
     function makeRow(data = {}, isNew = false) {
-      const tr = document.createElement("tr");
+      const row = document.createElement("div");
+      row.className = "row";
 
-      COLUMNS.forEach((key, idx) => {
-        const td = document.createElement("td");
-
-        // 包装単位系は <select> に
+      COLUMNS.forEach(key => {
+        // セル用コンテナ（枠線などは CSS 側で制御）
+        let cell;
         if (key === "housouTaniUnit" || key === "janHousouSuuryouUnit") {
+          // select プルダウン
           const sel = document.createElement("select");
-          sel.style.minWidth = "4em";
           const empty = document.createElement("option");
           empty.value = "";
-          empty.textContent = "";
           sel.appendChild(empty);
           Object.entries(taniMap).forEach(([code, name]) => {
             const opt = document.createElement("option");
@@ -74,49 +71,56 @@
             if (data[key] === code) opt.selected = true;
             sel.appendChild(opt);
           });
-          td.appendChild(sel);
-
-        } else if (key === "janCode" && !isNew) {
-          // 既存レコードの JAN は編集不可
-          td.textContent = data[key] || "";
-
+          cell = sel;
         } else {
-          // その他は contentEditable
-          td.contentEditable = true;
-          td.textContent = data[key] != null ? data[key] : "";
+          // input テキスト/数値
+          const inp = document.createElement("input");
+          // 数値系は type="number"
+          if (["housouSouryouNumber","janHousouSuuryouNumber","janHousouSouryouNumber"]
+              .includes(key)) {
+            inp.type = "number";
+            inp.min  = "0";
+          } else {
+            inp.type = "text";
+          }
+          // 既存レコードの JANコードは編集不可
+          if (!isNew && key === "janCode") {
+            inp.readOnly = true;
+            inp.classList.add("readonly");
+          }
+          inp.value = data[key] != null ? data[key] : "";
+          cell = inp;
         }
 
-        tr.appendChild(td);
+        row.appendChild(cell);
       });
 
-      // 操作セル：登録 or 更新
-      const opTd = document.createElement("td");
-      const opBtn = document.createElement("button");
-      opBtn.className = "btn";
-      opBtn.textContent = isNew ? "登録" : "更新";
-      opBtn.addEventListener("click", async () => {
-        // 入力値をまとめる
+      // ── 操作ボタン ──
+      const btn = document.createElement("button");
+      btn.textContent = isNew ? "登録" : "更新";
+      btn.className = "btn";
+      btn.addEventListener("click", async () => {
+        // 送信レコードを組み立て
         const rec = {};
         COLUMNS.forEach((key, idx) => {
-          let v;
-          if (key === "housouTaniUnit" || key === "janHousouSuuryouUnit") {
-            v = tr.children[idx].querySelector("select").value;
-          } else {
-            v = tr.children[idx].textContent.trim();
-            if (["housouSouryouNumber","janHousouSuuryouNumber","janHousouSouryouNumber"]
-                .includes(key)) {
-              v = parseInt(v, 10) || 0;
-            }
+          const el = row.children[idx];
+          let v = (el.tagName === "SELECT")
+                  ? el.value
+                  : el.value.trim();
+          // 数値は parseInt
+          if (["housouSouryouNumber","janHousouSuuryouNumber","janHousouSouryouNumber"]
+              .includes(key)) {
+            v = parseInt(v, 10) || 0;
           }
           rec[key] = v;
         });
 
-        // サーバーに upsert リクエスト
+        // upsert リクエスト
         try {
           const res = await fetch("/api/ma2/upsert", {
-            method: "POST",
+            method:  "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(rec)
+            body:    JSON.stringify(rec)
           });
           if (!res.ok) throw new Error(res.statusText);
           alert((isNew ? "登録" : "更新") + " 成功");
@@ -125,32 +129,31 @@
           alert("エラー: " + e.message);
         }
       });
-      opTd.appendChild(opBtn);
-      tr.appendChild(opTd);
+      row.appendChild(btn);
 
-      return tr;
+      return row;
     }
 
-    // データ取得→描画
+    // ── データ取得＆描画 ──
     async function loadData() {
-      // 他機能テーブルを隠して
-      outputTable.style.display = "none";
-      // MA2エディタを表示
+      // outputTable は common.js が隠すので、ここでは editor 表示
       editor.style.display = "block";
 
+      // グリッドをクリア
       renderHeader();
-      bodyTbody.innerHTML = "";
+      bodyGrid.innerHTML = "";
 
-      // 新規登録用の空行
-      bodyTbody.appendChild(makeRow({}, true));
+      // 新規登録用行
+      bodyGrid.appendChild(makeRow({}, true));
 
+      // 既存データ
       try {
-        const res = await fetch("/api/ma2");
+        const res  = await fetch("/api/ma2");
         if (!res.ok) throw new Error(res.statusText);
         const data = await res.json();
-        data.forEach(d => bodyTbody.appendChild(makeRow(d, false)));
-      } catch (err) {
-        alert("データ取得失敗: " + err.message);
+        data.forEach(rec => bodyGrid.appendChild(makeRow(rec, false)));
+      } catch (e) {
+        alert("データ取得失敗: " + e.message);
       }
     }
 

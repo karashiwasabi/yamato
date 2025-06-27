@@ -31,3 +31,11 @@ func ParseTANI(r io.Reader) (map[string]string, error) {
 	}
 	return taniMap, nil
 }
+
+func BuildNameToCodeMap(codeToName map[string]string) map[string]string {
+	nameToCode := make(map[string]string, len(codeToName))
+	for code, name := range codeToName {
+		nameToCode[name] = code
+	}
+	return nameToCode
+}

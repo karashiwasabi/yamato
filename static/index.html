@@ -1,23 +1,26 @@
+<!-- static/index.html -->
 <!DOCTYPE html>
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
   <title>YAMATO 集計システム</title>
   <link rel="stylesheet" href="/static/css/styles.css">
+  <link rel="icon" href="/favicon.ico" type="image/x-icon">
+  <link rel="shortcut icon" href="/favicon.ico" type="image/x-icon">
 </head>
 <body>
+  <!-- ヘッダー/ナビ -->
   <header id="header">
     <div id="indicator"></div>
     <nav>
-      <button id="datBtn"       class="btn">DAT</button>
-      <button id="usageBtn"     class="btn">USAGE</button>
+      <button id="datBtn" class="btn">DAT</button>
+      <button id="usageBtn" class="btn">USAGE</button>
       <button id="aggregateBtn" class="btn">集計</button>
       <button id="inventoryBtn" class="btn">棚卸</button>
-      <button id="ma2Btn"       class="btn">MA2編集</button>
+      <button id="ma2Btn" class="btn">MA2編集</button>
     </nav>
-
-    <!-- 集計フィルタ部 -->
-    <div id="aggregateFilter">
+    <!-- 集計フィルタ -->
+<div id="aggregateFilter">
       <form id="filterForm">
         <div class="row">
           <button type="button" id="printTable" class="btn">印刷</button>
@@ -38,63 +41,41 @@
     </div>
   </header>
 
-  <!-- ファイル入力フィールド -->
+  <!-- ファイル入力群（非表示） -->
   <input type="file" id="datInput"       style="display:none" multiple>
   <input type="file" id="usageInput"     style="display:none" multiple>
   <input type="file" id="inventoryInput" style="display:none" accept=".csv">
 
-  <!-- 共通 出力テーブル (DAT/USAGE/集計/棚卸用) -->
+  <!-- DAT/USAGE/集計/棚卸 用テーブル -->
   <table id="outputTable">
     <thead></thead>
     <tbody></tbody>
   </table>
 
-  <!-- MA2編集用テーブル (初期非表示) -->
-  <div class="ma2-editor" style="display:none">
-    <!-- ヘッダー専用 -->
-    <table id="ma2Header">
-      <thead>
-          <colgroup>
-    <col style="width:8%">
-    <col style="width:8%">
-    <col style="width:28%">
-    <col style="width:8%">
-    <col style="width:8%">
-    <col style="width:8%">
-    <col style="width:8%">
-    <col style="width:8%">
-    <col style="width:8%">
-    <col style="width:8%">
-  </colgroup>
+  <!-- デバッグ用表示 -->
+  <pre id="debug" style="background:#f0f0f0; padding:0.5em; margin:1em 0;"></pre>
 
-
-      </thead>
-    </table>
-    <!-- ボディだけスクロール -->
-    <div class="ma2-body">
-      <table id="ma2Body">
-        <tbody><colgroup>
-    <col style="width:8%">
-    <col style="width:8%">
-    <col style="width:28%">
-    <col style="width:8%">
-    <col style="width:8%">
-    <col style="width:8%">
-    <col style="width:8%">
-    <col style="width:8%">
-    <col style="width:8%">
-    <col style="width:8%">
-    </colgroup>
-
-</tbody>
-      </table>
+  <!-- MA2編集用グリッド -->
+  <div class="ma2-editor" style="display:none;">
+    <div class="ma2-grid header">
+      <div>JANコード</div>
+      <div>YJコード</div>
+      <div>商品名</div>
+      <div>包装形態</div>
+      <div>包装単位</div>
+      <div>包装総量</div>
+      <div>JAN包装数量</div>
+      <div>JAN包装数量単位</div>
+      <div>JAN包装総量</div>
+      <div>操作</div>
+    </div>
+    <div class="ma2-grid body">
+      <!-- ma2.js が <div class="row">…を追加 -->
     </div>
   </div>
 
-  <!-- ■ デバッグ領域 -->
-  <pre id="debug" style="background:#f0f0f0; padding:0.5em; margin:1em 0;"></pre>
-
-  <!-- スクリプト読み込み -->
+  <!-- スクリプト読み込み順 -->
+  <script src="/static/js/common.js"></script>
   <script src="/static/js/dat.js"></script>
   <script src="/static/js/usage.js"></script>
   <script src="/static/js/aggregate.js"></script>

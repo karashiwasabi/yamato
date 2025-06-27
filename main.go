@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"io"
 	"log"
+	"mime"
 	"net/http"
 	"os"
 	"os/exec"
@@ -21,6 +22,7 @@ import (
 	"YAMATO/inventory"
 	"YAMATO/ma0"
 	"YAMATO/model"
+	"YAMATO/tani"
 	"YAMATO/usage"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -196,11 +198,30 @@ func autoLaunchBrowser(url string) {
 	}
 }
 
+var nameToCode map[string]string
+
+func init() {
+	const taniPath = `C:\Dev\YAMATO\SOU\TANI.CSV`
+	f, err := os.Open(taniPath)
+
+	if err != nil {
+		log.Fatalf("TANI.csv open error: %v", err)
+	}
+	defer f.Close()
+
+	codeToName, err := tani.ParseTANI(f)
+	if err != nil {
+		log.Fatalf("tani.ParseTANI error: %v", err)
+	}
+	nameToCode = tani.BuildNameToCodeMap(codeToName)
+}
+
 func uploadInventoryHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
 		return
 	}
+
 	file, _, err := r.FormFile("inventoryFile")
 	if err != nil {
 		http.Error(w, "ファイルが指定されていません", http.StatusBadRequest)
@@ -210,34 +231,71 @@ func uploadInventoryHandler(w http.ResponseWriter, r *http.Request) {
 
 	recs, err := inventory.ParseInventoryCSV(file)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, "CSV読み込みエラー: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	// DB に UPSERT するときの product_name を決める
+	processed := 0
 	for _, rec := range recs {
-		// MA0 名があればそれを、なければ CSV 名を使う
-		prodName := rec.MA0Name
+		processed++
+
+		// MA0 照会／登録
+		maRec, created, err := ma0.CheckOrCreateMA0(rec.JAN)
+		if err != nil {
+			log.Printf("[INVENTORY] MA0 lookup error JAN=%s: %v", rec.JAN, err)
+		}
+
+		// MA2 登録（新規 or 商品名未設定時のみ）
+		if created || maRec.MA018JC018ShouhinMei == "" {
+			// CSV から拾った「包装単位」「JAN包装単位」「JAN包装数量」を逆引き／数値化
+			packCode := nameToCode[rec.PackagingUnit]
+			janUnit := nameToCode[rec.JanPackagingUnit]
+			janQty := int(rec.JanPackagingQty)
+
+			// 商品名は MA0 側にあればそちらを優先、なければ CSV 上の名前
+			pname := maRec.MA018JC018ShouhinMei
+			if pname == "" {
+				pname = rec.CSVName
+			}
+
+			// MA2 レコード組立て＆登録
+			ma2rec := &ma0.MARecord{
+				JanCode:                rec.JAN,
+				ProductName:            pname,
+				HousouKeitai:           "",
+				HousouTaniUnit:         packCode,
+				HousouSouryouNumber:    0,
+				JanHousouSuuryouNumber: janQty,
+				JanHousouSuuryouUnit:   janUnit,
+				JanHousouSouryouNumber: 0,
+			}
+			if err := ma0.RegisterMA(ma0.DB, ma2rec); err != nil {
+				log.Printf("[INVENTORY] MA2 registration error JAN=%s: %v", rec.JAN, err)
+			}
+		}
+
+		// inventory テーブルに UPSERT（従来どおり）
+		prodName := maRec.MA018JC018ShouhinMei
 		if prodName == "" {
 			prodName = rec.CSVName
 		}
-
-		_, err := ma0.DB.Exec(
+		_, err = ma0.DB.Exec(
 			`INSERT OR REPLACE INTO inventory
                (inv_date, jan_code, product_name, qty, unit)
              VALUES (?, ?, ?, ?, ?)`,
 			rec.Date, rec.JAN, prodName, rec.Qty, rec.Unit,
 		)
 		if err != nil {
-			log.Printf("inventory upsert error: %v", err)
+			log.Printf("[INVENTORY] upsert error: %v", err)
 		}
 	}
 
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"count":       len(recs),
-		"inventories": recs, // rec.MA0Name／rec.CSVName が JSON に含まれます
+		"count":       processed,
+		"inventories": recs,
 	})
+
 }
 
 // listMa2Handler は MA2全件を空配列保証で返却
@@ -322,6 +380,10 @@ func upsertMa2Handler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+
+	mime.AddExtensionType(".js", "application/javascript")
+	mime.AddExtensionType(".css", "text/css")
+
 	// SQLite DB を開く
 	db, err := sql.Open("sqlite3", "yamato.db")
 	if err != nil {
