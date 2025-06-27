@@ -196,3 +196,8 @@ func ReplaceUsageRecordsWithPeriod(db *sql.DB, recs []UsageRecord) error {
 	}
 	return nil
 }
+
+func GetTaniMap() map[string]string {
+	loadTaniMap() // 初回だけ読み込まれる
+	return taniMap
+}

@@ -240,6 +240,87 @@ func uploadInventoryHandler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// listMa2Handler は MA2全件を空配列保証で返却
+func listMa2Handler(w http.ResponseWriter, r *http.Request) {
+	type rec struct {
+		JanCode                string `json:"janCode"`
+		YjCode                 string `json:"yjCode"`
+		Shouhinmei             string `json:"shouhinmei"`
+		HousouKeitai           string `json:"housouKeitai"`
+		HousouTaniUnit         string `json:"housouTaniUnit"`
+		HousouSouryouNumber    int    `json:"housouSouryouNumber"`
+		JanHousouSuuryouNumber int    `json:"janHousouSuuryouNumber"`
+		JanHousouSuuryouUnit   string `json:"janHousouSuuryouUnit"`
+		JanHousouSouryouNumber int    `json:"janHousouSouryouNumber"`
+	}
+	out := make([]rec, 0) // nil→[] になる
+	rows, err := ma0.DB.Query(`
+      SELECT MA2JanCode, MA2YjCode, Shouhinmei,
+             HousouKeitai, HousouTaniUnit, HousouSouryouNumber,
+             JanHousouSuuryouNumber, JanHousouSuuryouUnit, JanHousouSouryouNumber
+        FROM ma2
+       ORDER BY MA2JanCode
+    `)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var r rec
+		if err := rows.Scan(
+			&r.JanCode, &r.YjCode, &r.Shouhinmei,
+			&r.HousouKeitai, &r.HousouTaniUnit, &r.HousouSouryouNumber,
+			&r.JanHousouSuuryouNumber, &r.JanHousouSuuryouUnit, &r.JanHousouSouryouNumber,
+		); err != nil {
+			continue
+		}
+		out = append(out, r)
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	json.NewEncoder(w).Encode(out)
+}
+
+// upsertMa2Handler は INSERT OR REPLACE で upsert
+func upsertMa2Handler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var rec struct {
+		JanCode                string `json:"janCode"`
+		YjCode                 string `json:"yjCode"`
+		Shouhinmei             string `json:"shouhinmei"`
+		HousouKeitai           string `json:"housouKeitai"`
+		HousouTaniUnit         string `json:"housouTaniUnit"`
+		HousouSouryouNumber    int    `json:"housouSouryouNumber"`
+		JanHousouSuuryouNumber int    `json:"janHousouSuuryouNumber"`
+		JanHousouSuuryouUnit   string `json:"janHousouSuuryouUnit"`
+		JanHousouSouryouNumber int    `json:"janHousouSouryouNumber"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&rec); err != nil {
+		http.Error(w, "Bad Request: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	_, err := ma0.DB.Exec(`
+      INSERT OR REPLACE INTO ma2
+       (MA2JanCode, MA2YjCode, Shouhinmei,
+        HousouKeitai, HousouTaniUnit, HousouSouryouNumber,
+        JanHousouSuuryouNumber, JanHousouSuuryouUnit, JanHousouSouryouNumber)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `,
+		rec.JanCode, rec.YjCode, rec.Shouhinmei,
+		rec.HousouKeitai, rec.HousouTaniUnit, rec.HousouSouryouNumber,
+		rec.JanHousouSuuryouNumber, rec.JanHousouSuuryouUnit, rec.JanHousouSouryouNumber,
+	)
+	if err != nil {
+		http.Error(w, "DB Error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func main() {
 	// SQLite DB を開く
 	db, err := sql.Open("sqlite3", "yamato.db")
@@ -284,6 +365,14 @@ func main() {
 	http.HandleFunc("/aggregate", aggregate.AggregateHandler)
 	http.HandleFunc("/productName", productNameHandler)
 	http.HandleFunc("/uploadInventory", uploadInventoryHandler)
+
+	// --- MA2編集用API 追加 ---
+	http.HandleFunc("/api/ma2", listMa2Handler)
+	http.HandleFunc("/api/ma2/upsert", upsertMa2Handler)
+	http.HandleFunc("/api/tani", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		json.NewEncoder(w).Encode(usage.GetTaniMap())
+	})
 
 	// 自動ブラウザ起動
 	go autoLaunchBrowser("http://localhost:8080")

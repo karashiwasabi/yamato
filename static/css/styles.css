@@ -4,7 +4,6 @@
   padding: 0;
   box-sizing: border-box;
 }
-
 body {
   font-family: Arial, sans-serif;
   background: #fafafa;
@@ -32,14 +31,13 @@ body {
   top: 0;
   background: #fff;
   border-bottom: 1px solid #ccc;
+  z-index: 10;
 }
 #header nav {
   display: flex;
   gap: 0.5em;
   padding: 0.5em;
 }
-
-/* インジケーター */
 #indicator {
   padding: 0.5em;
   background: #e9ecef;
@@ -79,22 +77,21 @@ body {
   margin-right: 0.3em;
 }
 
-/* テーブル */
-#outputTable {
+/* 共通テーブル */
+table {
   width: 100%;
   border-collapse: collapse;
   margin-top: 1em;
 }
-#outputTable th,
-#outputTable td {
+th, td {
   border: 1px solid #ccc;
   padding: 0.5em;
   font-size: 0.9em;
 }
-#outputTable thead {
+thead {
   background: #e9ecef;
 }
-#outputTable tr:nth-child(even) td {
+tr:nth-child(even) td {
   background: #f8f9fa;
 }
 
@@ -107,8 +104,7 @@ body {
   body * {
     visibility: hidden;
   }
-  #outputTable,
-  #outputTable * {
+  #outputTable, #outputTable * {
     visibility: visible;
   }
   #outputTable {
@@ -117,4 +113,35 @@ body {
     left: 0;
     width: 100%;
   }
+}
+
+/* ================================== */
+/* MA2編集用ヘッダー＋スクロール分割 */
+/* ================================== */
+.ma2-editor {
+  margin-top: 1em;
+}
+/* ヘッダー用テーブル */
+#ma2Header {
+  width: 100%;
+  border-collapse: collapse;
+}
+/* ヘッダーの見出しセル */
+#ma2Header th {
+  background: #f0f0f0;
+  z-index: 2;
+}
+/* ボディ部分をスクロール */
+.ma2-body {
+  max-height: 80vh;   /* お好みで調整 */
+  overflow-y: auto;
+}
+/* ボディ用テーブル */
+#ma2Body {
+  width: 100%;
+  border-collapse: collapse;
+}
+/* ボディのセル */
+#ma2Body td {
+  background: #fff;
 }

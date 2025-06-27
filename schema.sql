@@ -373,18 +373,18 @@ CREATE TABLE IF NOT EXISTS inventory (
 -- =========================================
 -- MA2 テーブル定義
 -- =========================================
-DROP TABLE IF EXISTS ma2;
-CREATE TABLE ma2 (
-  MA2JanCode                TEXT    PRIMARY KEY,  -- 0: JANコード（MA2 用自動採番結果）
-  MA2YjCode                 TEXT,               -- 9: YJコード（MA2 用自動採番結果）
-  Shouhinmei                TEXT,               -- 18: 商品名
-  HousouKeitai              TEXT,               -- 37: 包装形態
-  HousouTaniUnit            TEXT,               -- 38: 包装単位コード
-  HousouSouryouNumber       INTEGER,            -- 44: 包装数量
-  JanHousouSuuryouNumber    INTEGER,            -- 131: JAN包装数量
-  JanHousouSuuryouUnit      TEXT,               -- 132: JAN包装単位コード
-  JanHousouSouryouNumber    INTEGER             -- 133: JAN包装形態別数量
-);
+CREATE TABLE IF NOT EXISTS ma2 (
+    MA2JanCode                TEXT    PRIMARY KEY,
+    MA2YjCode                 TEXT,
+    Shouhinmei                TEXT,
+    HousouKeitai              TEXT,
+    HousouTaniUnit            TEXT,
+    HousouSouryouNumber       INTEGER,
+    JanHousouSuuryouNumber    INTEGER,
+    JanHousouSuuryouUnit      TEXT,
+    JanHousouSouryouNumber    INTEGER
+ );
+
 
 -- =========================================
 -- シーケンス管理用テーブル追加

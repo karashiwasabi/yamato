@@ -13,6 +13,7 @@
       <button id="usageBtn"     class="btn">USAGE</button>
       <button id="aggregateBtn" class="btn">集計</button>
       <button id="inventoryBtn" class="btn">棚卸</button>
+      <button id="ma2Btn"       class="btn">MA2編集</button>
     </nav>
 
     <!-- 集計フィルタ部 -->
@@ -42,11 +43,53 @@
   <input type="file" id="usageInput"     style="display:none" multiple>
   <input type="file" id="inventoryInput" style="display:none" accept=".csv">
 
-  <!-- 出力テーブル -->
+  <!-- 共通 出力テーブル (DAT/USAGE/集計/棚卸用) -->
   <table id="outputTable">
     <thead></thead>
     <tbody></tbody>
   </table>
+
+  <!-- MA2編集用テーブル (初期非表示) -->
+  <div class="ma2-editor" style="display:none">
+    <!-- ヘッダー専用 -->
+    <table id="ma2Header">
+      <thead>
+          <colgroup>
+    <col style="width:8%">
+    <col style="width:8%">
+    <col style="width:28%">
+    <col style="width:8%">
+    <col style="width:8%">
+    <col style="width:8%">
+    <col style="width:8%">
+    <col style="width:8%">
+    <col style="width:8%">
+    <col style="width:8%">
+  </colgroup>
+
+
+      </thead>
+    </table>
+    <!-- ボディだけスクロール -->
+    <div class="ma2-body">
+      <table id="ma2Body">
+        <tbody><colgroup>
+    <col style="width:8%">
+    <col style="width:8%">
+    <col style="width:28%">
+    <col style="width:8%">
+    <col style="width:8%">
+    <col style="width:8%">
+    <col style="width:8%">
+    <col style="width:8%">
+    <col style="width:8%">
+    <col style="width:8%">
+    </colgroup>
+
+</tbody>
+      </table>
+    </div>
+  </div>
 
   <!-- ■ デバッグ領域 -->
   <pre id="debug" style="background:#f0f0f0; padding:0.5em; margin:1em 0;"></pre>
@@ -56,5 +99,6 @@
   <script src="/static/js/usage.js"></script>
   <script src="/static/js/aggregate.js"></script>
   <script src="/static/js/inventory.js"></script>
+  <script src="/static/js/ma2.js"></script>
 </body>
 </html>
