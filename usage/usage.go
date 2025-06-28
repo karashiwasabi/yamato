@@ -45,6 +45,7 @@ func loadTaniMap() {
 		return
 	}
 	defer f.Close()
+
 	m, err := tani.ParseTANI(f)
 	if err != nil {
 		log.Printf("TANI parse error: %v", err)
@@ -82,8 +83,7 @@ func getOrganizedFlag(jan string) int {
 // MA0 未登録品は MA2 テーブルに登録します。
 func ParseUsageFile(r io.Reader) ([]UsageRecord, error) {
 	loadTaniMap()
-	decoder := japanese.ShiftJIS.NewDecoder()
-	scanner := bufio.NewScanner(transform.NewReader(r, decoder))
+	scanner := bufio.NewScanner(transform.NewReader(r, japanese.ShiftJIS.NewDecoder()))
 
 	var records []UsageRecord
 	headerSkipped := false
@@ -111,7 +111,7 @@ func ParseUsageFile(r io.Reader) ([]UsageRecord, error) {
 			UsageAmount:      fields[4],
 			UsageUnit:        fields[5],
 		}
-		// 単位名称
+		// 単位名称を解決
 		if nm := GetTaniName(ur.UsageUnit); nm != "" {
 			ur.UsageUnitName = nm
 		} else {
@@ -125,14 +125,14 @@ func ParseUsageFile(r io.Reader) ([]UsageRecord, error) {
 		if err0 != nil {
 			log.Printf("[USAGE] MA0 lookup error JAN=%s: %v", ur.UsageJanCode, err0)
 		}
-		if created {
-			// 新規 MA0 作成は別でカウント
-		}
+
+		// マスター名未設定の既存品のみ MA2 登録
 		if !created && ma0Rec.MA018JC018ShouhinMei == "" {
 			hs, _ := strconv.Atoi(ma0Rec.MA044JC044HousouSouryouSuuchi)
 			jsn, _ := strconv.Atoi(ma0Rec.MA131JA006HousouSuuryouSuuchi)
 			jssn, _ := strconv.Atoi(ma0Rec.MA133JA008HousouSouryouSuuchi)
-			maRec := &ma0.MARecord{
+
+			mrec := &ma0.MARecord{
 				JanCode:                ur.UsageJanCode,
 				ProductName:            ur.UsageProductName,
 				HousouKeitai:           ma0Rec.MA037JC037HousouKeitai,
@@ -142,7 +142,9 @@ func ParseUsageFile(r io.Reader) ([]UsageRecord, error) {
 				JanHousouSuuryouUnit:   ma0Rec.MA132JA007HousouSuuryouTaniCode,
 				JanHousouSouryouNumber: jssn,
 			}
-			if err2 := ma0.RegisterMA(ma0.DB, maRec); err2 != nil {
+			// シーケンスを受け取りつつ登録（戻り値は破棄）
+			_, _, err2 := ma0.RegisterMA(ma0.DB, mrec)
+			if err2 != nil {
 				log.Printf("[USAGE] MA2 registration error JAN=%s: %v", ur.UsageJanCode, err2)
 			}
 		}
@@ -181,10 +183,12 @@ func ReplaceUsageRecordsWithPeriod(db *sql.DB, recs []UsageRecord) error {
 	); err != nil {
 		return fmt.Errorf("delete existing USAGE error: %w", err)
 	}
-	stmt := `INSERT OR REPLACE INTO usagerecords (
-      usageDate, usageYjCode, usageJanCode,
-      usageProductName, usageAmount, usageUnit, usageUnitName, organizedFlag
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+	stmt := `
+        INSERT OR REPLACE INTO usagerecords (
+          usageDate, usageYjCode, usageJanCode,
+          usageProductName, usageAmount, usageUnit,
+          usageUnitName, organizedFlag
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
 	for _, r := range recs {
 		if _, err := db.Exec(stmt,
 			r.UsageDate, r.UsageYjCode, r.UsageJanCode,
@@ -197,7 +201,8 @@ func ReplaceUsageRecordsWithPeriod(db *sql.DB, recs []UsageRecord) error {
 	return nil
 }
 
+// GetTaniMap は main.go から呼ばれる公開版です。
 func GetTaniMap() map[string]string {
-	loadTaniMap() // 初回だけ読み込まれる
+	loadTaniMap()
 	return taniMap
 }

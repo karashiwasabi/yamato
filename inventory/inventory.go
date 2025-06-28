@@ -4,127 +4,136 @@ import (
 	"encoding/csv"
 	"fmt"
 	"io"
-	"log"
 	"strconv"
 	"strings"
 
 	"YAMATO/ma0"
+	"YAMATO/tani"
 	"YAMATO/usage"
 
 	"golang.org/x/text/encoding/japanese"
 	"golang.org/x/text/transform"
 )
 
-// InventoryRecord は棚卸１件分の情報です。
+// trimQS は前後のダブルクォート、シングルクォート、空白を削ります。
+func trimQS(s string) string {
+	return strings.Trim(s, `"' `)
+}
+
+var (
+	// codeToName はコード→名称マップ
+	codeToName = usage.GetTaniMap()
+	// nameToCode は名称→コード逆マップ
+	nameToCode = tani.BuildNameToCodeMap(codeToName)
+)
+
+// InventoryRecord は CSV の１行分を表し、schema.sql の inventory 11列に対応します。
 type InventoryRecord struct {
-	Date    string `json:"Date"`    // YYYYMMDD
-	JAN     string `json:"JAN"`     // コロン等除去済JANコード
-	MA0Name string `json:"MA0Name"` // MA0 から取得した商品名
-	CSVName string `json:"CSVName"` // CSV 上の生商品名(rec[12])
-	Qty     int    `json:"Qty"`     // rawQty × MA131 換算後在庫数
-	Unit    string `json:"Unit"`    // MA038 を名称に変換した単位
-
-	// 以下、CSVから取得した包装関連
-	PackagingUnit    string  `json:"packagingUnit"`    // CSV[16] 包装単位名称
-	JanPackagingQty  float64 `json:"janPackagingQty"`  // CSV[17] JAN包装数量
-	JanPackagingUnit string  `json:"janPackagingUnit"` // CSV[23] JAN包装単位名称
+	InvDate                   string  // 棚卸日
+	InvYjCode                 string  // YJコード
+	InvJanCode                string  // JANコード
+	InvProductName            string  // 商品名
+	InvJanHousouSuuryouNumber float64 // JAN包装数量（数字）
+	Qty                       float64 // 在庫数（包装単位）
+	HousouTaniUnit            string  // 包装単位（名称）
+	InvHousouTaniUnit         string  // 包装単位（コード）
+	JanQty                    float64 // 在庫数（JAN包装単位）
+	JanHousouSuuryouUnit      string  // JAN包装数量単位（名称）
+	InvJanHousouSuuryouUnit   string  // JAN包装数量単位（コード）
 }
 
-// sanitizeDigits は文字列から数字以外をすべて削除します。
-func sanitizeDigits(s string) string {
-	return strings.Map(func(r rune) rune {
-		if r >= '0' && r <= '9' {
-			return r
-		}
-		return -1
-	}, s)
-}
-
-// ParseInventoryCSV は Shift-JIS 形式の棚卸 CSV を読み込み、
-// InventoryRecord スライスを返します。
 func ParseInventoryCSV(r io.Reader) ([]InventoryRecord, error) {
 	rd := csv.NewReader(transform.NewReader(r, japanese.ShiftJIS.NewDecoder()))
+	rd.LazyQuotes = true
 	rd.FieldsPerRecord = -1
 
-	rows, err := rd.ReadAll()
+	// ── 1行目(H行)読み込み: parts[4] に棚卸日が入っている ──
+	hrow, err := rd.Read()
 	if err != nil {
-		return nil, fmt.Errorf("CSV読み込みエラー: %w", err)
+		return nil, fmt.Errorf("inventory: H行読込エラー: %w", err)
 	}
-	if len(rows) < 2 {
-		return nil, fmt.Errorf("CSVにデータがありません")
+	if len(hrow) <= 4 {
+		return nil, fmt.Errorf("inventory: H行の列不足")
 	}
+	date := trimQS(hrow[4])
 
-	// ヘッダー１行目(インデックス0)の5列目(インデックス4)から日付取得
-	dateRaw := rows[0][4]
-	date := sanitizeDigits(dateRaw)
-
-	var out []InventoryRecord
-	for i, rec := range rows[1:] {
-		rowNum := i + 2
-		if rec[0] != "R1" && len(rec) <= 45 {
-			log.Printf("行%dスキップ: 列数不足(len=%d)", rowNum, len(rec))
+	var recs []InventoryRecord
+	for {
+		parts, err := rd.Read()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("inventory: csv read error: %w", err)
+		}
+		// 必要列数チェック
+		if len(parts) <= 45 {
 			continue
 		}
 
-		// rawQty (21列目) を ParseFloat → int
-		rawF, err := strconv.ParseFloat(strings.TrimSpace(rec[21]), 64)
-		if err != nil {
-			if rec[0] == "R1" {
-				log.Printf("行%d: R1行 rawQtyパース失敗 %q → 0とみなす", rowNum, rec[21])
-				rawF = 0
+		// ── 基本情報 ──
+		yj := trimQS(parts[42])   // R1行 43列目
+		jan := trimQS(parts[45])  // R1行 46列目
+		name := trimQS(parts[12]) // R1行 13列目
+
+		// ── 数量情報 ──
+		// JAN包装数量: 18列目
+		jps, _ := strconv.ParseFloat(trimQS(parts[17]), 64)
+		// 基準数量: 15列目
+		baseQty, _ := strconv.ParseFloat(trimQS(parts[21]), 64)
+		// 在庫数(包装単位) = 基準数量 × JAN包装数量
+		qty := baseQty * jps
+		// 在庫数(JAN包装単位): 22列目
+		jq, _ := strconv.ParseFloat(trimQS(parts[21]), 64)
+
+		// ── 包装単位情報 ──
+		rawPack := trimQS(parts[16]) // 17列目
+		packUnit := rawPack
+		if packUnit == "" {
+			maRec, _, _ := ma0.CheckOrCreateMA0(jan)
+			code := maRec.MA038JC038HousouTaniSuuchi
+			if nm := usage.GetTaniName(code); nm != "" {
+				packUnit = nm
 			} else {
-				log.Printf("行%dスキップ: rawQtyパース失敗 %q", rowNum, rec[21])
-				continue
+				packUnit = code
 			}
 		}
-		rawQty := int(rawF)
-
-		// CSV上の商品名(rec[12])
-		csvName := strings.TrimSpace(rec[12])
-
-		// JANコード(45列目)→数字のみ抽出
-		jan := sanitizeDigits(rec[45])
-
-		// MA0 連携して在庫換算と基本単位取得
-		maRec, _, err := ma0.CheckOrCreateMA0(jan)
-		if err != nil {
-			log.Printf("行%d: MA0連携エラー JAN=%s: %v", rowNum, jan, err)
-		}
-		pkgQty, err := strconv.Atoi(maRec.MA131JA006HousouSuuryouSuuchi)
-		if err != nil || pkgQty <= 0 {
-			pkgQty = 1
-		}
-		qty := rawQty * pkgQty
-
-		basicUnitCode := maRec.MA038JC038HousouTaniSuuchi
-		unitName := usage.GetTaniName(basicUnitCode)
-		if unitName == "" {
-			unitName = basicUnitCode
+		packCode := nameToCode[packUnit]
+		if packCode == "" {
+			packCode = packUnit
 		}
 
-		// MA0 から取得した商品名
-		ma0Name := maRec.MA018JC018ShouhinMei
-
-		// CSV の 16,17,23 列から包装情報を取得
-		pu, jpUnit := "", ""
-		jpQty := 0.0
-		if len(rec) > 23 {
-			pu = strings.Trim(rec[16], "：:'\"")
-			jpQty, _ = strconv.ParseFloat(strings.TrimSpace(rec[17]), 64)
-			jpUnit = strings.Trim(rec[23], "：:'\"")
+		// ── JAN包装数量単位情報 ──
+		rawJanUnit := trimQS(parts[23]) // 24列目
+		janUnit := rawJanUnit
+		if janUnit == "" {
+			maRec, _, _ := ma0.CheckOrCreateMA0(jan)
+			code := maRec.MA132JA007HousouSuuryouTaniCode
+			if nm := usage.GetTaniName(code); nm != "" {
+				janUnit = nm
+			} else {
+				janUnit = code
+			}
+		}
+		janCodeMap := nameToCode[janUnit]
+		if janCodeMap == "" {
+			janCodeMap = janUnit
 		}
 
-		out = append(out, InventoryRecord{
-			Date:             date,
-			JAN:              jan,
-			MA0Name:          ma0Name,
-			CSVName:          csvName,
-			Qty:              qty,
-			Unit:             unitName,
-			PackagingUnit:    pu,
-			JanPackagingQty:  jpQty,
-			JanPackagingUnit: jpUnit,
+		recs = append(recs, InventoryRecord{
+			InvDate:                   date,
+			InvYjCode:                 yj,
+			InvJanCode:                jan,
+			InvProductName:            name,
+			InvJanHousouSuuryouNumber: jps,
+			Qty:                       qty,
+			HousouTaniUnit:            packUnit,
+			InvHousouTaniUnit:         packCode,
+			JanQty:                    jq,
+			JanHousouSuuryouUnit:      janUnit,
+			InvJanHousouSuuryouUnit:   janCodeMap,
 		})
 	}
-	return out, nil
+
+	return recs, nil
 }

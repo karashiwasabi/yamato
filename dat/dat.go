@@ -129,7 +129,7 @@ func ParseDATFile(
 			hs, _ := strconv.Atoi(ma0Rec.MA044JC044HousouSouryouSuuchi)
 			jsn, _ := strconv.Atoi(ma0Rec.MA131JA006HousouSuuryouSuuchi)
 			jssn, _ := strconv.Atoi(ma0Rec.MA133JA008HousouSouryouSuuchi)
-			maRec := &ma0.MARecord{
+			mrec := &ma0.MARecord{
 				JanCode:                datJan,
 				ProductName:            name,
 				HousouKeitai:           ma0Rec.MA037JC037HousouKeitai,
@@ -139,7 +139,8 @@ func ParseDATFile(
 				JanHousouSuuryouUnit:   ma0Rec.MA132JA007HousouSuuryouTaniCode,
 				JanHousouSouryouNumber: jssn,
 			}
-			if err2 := ma0.RegisterMA(ma0.DB, maRec); err2 != nil {
+			_, _, err2 := ma0.RegisterMA(ma0.DB, mrec)
+			if err2 != nil {
 				log.Printf("[DAT] MA2 registration error JAN=%s: %v", datJan, err2)
 			}
 		}

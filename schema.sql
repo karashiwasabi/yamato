@@ -362,13 +362,23 @@ CREATE TABLE IF NOT EXISTS usagerecords (
 );
 
 CREATE TABLE IF NOT EXISTS inventory (
-  inv_date     TEXT    NOT NULL,  -- YYYYMMDD
-  jan_code     TEXT    NOT NULL,  -- JANコード
-  product_name TEXT    NOT NULL,  -- 商品名
-  qty          INTEGER NOT NULL,  -- 在庫数
-  unit         TEXT    NOT NULL,  -- 単位
-  PRIMARY KEY(inv_date, jan_code)
+  invDate                     TEXT    NOT NULL,  -- 棚卸日 (YYYYMMDD)
+  invYjCode                   TEXT    NOT NULL,  -- YJコード
+  invJanCode                  TEXT    NOT NULL,  -- JANコード
+  invProductName              TEXT    NOT NULL,  -- 商品名
+  invJanHousouSuuryouNumber   REAL    NOT NULL,  -- JAN包装数量（数字）
+  qty                         REAL    NOT NULL,  -- 在庫数（包装単位）
+  HousouTaniUnit              TEXT    NOT NULL,  -- 包装単位（単位）
+  InvHousouTaniUnit           TEXT    NOT NULL,  -- 包装単位（単位）逆マッピング
+  janqty                      REAL    NOT NULL,  -- 在庫数（JAN包装単位）
+  JanHousouSuuryouUnit        TEXT    NOT NULL,  -- JAN包装単位（単位）
+  InvJanHousouSuuryouUnit     TEXT    NOT NULL,  -- JAN包装単位（単位）逆マッピング
+  PRIMARY KEY (invDate, invJanCode)
 );
+
+
+
+
 
 -- =========================================
 -- MA2 テーブル定義

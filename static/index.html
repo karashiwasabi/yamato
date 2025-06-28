@@ -46,11 +46,27 @@
   <input type="file" id="usageInput"     style="display:none" multiple>
   <input type="file" id="inventoryInput" style="display:none" accept=".csv">
 
-  <!-- DAT/USAGE/集計/棚卸 用テーブル -->
-  <table id="outputTable">
-    <thead></thead>
-    <tbody></tbody>
-  </table>
+<!-- DAT/USAGE/集計/棚卸 用テーブル -->
+<table id="outputTable">
+  <thead>
+    <tr>
+      <th>棚卸日</th>
+      <th>YJコード</th>
+      <th>JANコード</th>
+      <th>商品名</th>
+      <th>JAN包装数量</th>
+      <th>在庫数(包装単位)</th>
+      <th>包装単位</th>
+      <th>包装単位コード</th>
+      <th>在庫数(JAN包装単位)</th>
+      <th>JAN包装数量単位</th>
+      <th>JAN包装単位コード</th>
+    </tr>
+  </thead>
+  <tbody></tbody>
+</table>
+
+
 
   <!-- デバッグ用表示 -->
   <pre id="debug" style="background:#f0f0f0; padding:0.5em; margin:1em 0;"></pre>
