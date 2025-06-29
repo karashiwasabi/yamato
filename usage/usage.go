@@ -136,7 +136,7 @@ func ParseUsageFile(r io.Reader) ([]UsageRecord, error) {
 				JanCode:                ur.UsageJanCode,
 				ProductName:            ur.UsageProductName,
 				HousouKeitai:           ma0Rec.MA037JC037HousouKeitai,
-				HousouTaniUnit:         ma0Rec.MA038JC038HousouTaniSuuchi,
+				HousouTaniUnit:         ur.UsageUnit,
 				HousouSouryouNumber:    hs,
 				JanHousouSuuryouNumber: jsn,
 				JanHousouSuuryouUnit:   ma0Rec.MA132JA007HousouSuuryouTaniCode,

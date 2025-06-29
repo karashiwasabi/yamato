@@ -22,6 +22,7 @@ import (
 	"YAMATO/inventory"
 	"YAMATO/jcshms"
 	"YAMATO/ma0"
+	"YAMATO/ma2"
 	"YAMATO/model"
 	"YAMATO/usage"
 
@@ -340,45 +341,6 @@ func listMa2Handler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(out)
 }
 
-// upsertMa2Handler は INSERT OR REPLACE で upsert
-func upsertMa2Handler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	var rec struct {
-		JanCode                string `json:"janCode"`
-		YjCode                 string `json:"yjCode"`
-		Shouhinmei             string `json:"shouhinmei"`
-		HousouKeitai           string `json:"housouKeitai"`
-		HousouTaniUnit         string `json:"housouTaniUnit"`
-		HousouSouryouNumber    int    `json:"housouSouryouNumber"`
-		JanHousouSuuryouNumber int    `json:"janHousouSuuryouNumber"`
-		JanHousouSuuryouUnit   string `json:"janHousouSuuryouUnit"`
-		JanHousouSouryouNumber int    `json:"janHousouSouryouNumber"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&rec); err != nil {
-		http.Error(w, "Bad Request: "+err.Error(), http.StatusBadRequest)
-		return
-	}
-	_, err := ma0.DB.Exec(`
-      INSERT OR REPLACE INTO ma2
-       (MA2JanCode, MA2YjCode, Shouhinmei,
-        HousouKeitai, HousouTaniUnit, HousouSouryouNumber,
-        JanHousouSuuryouNumber, JanHousouSuuryouUnit, JanHousouSouryouNumber)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `,
-		rec.JanCode, rec.YjCode, rec.Shouhinmei,
-		rec.HousouKeitai, rec.HousouTaniUnit, rec.HousouSouryouNumber,
-		rec.JanHousouSuuryouNumber, rec.JanHousouSuuryouUnit, rec.JanHousouSouryouNumber,
-	)
-	if err != nil {
-		http.Error(w, "DB Error: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
-}
-
 func main() {
 
 	mime.AddExtensionType(".js", "application/javascript")
@@ -426,11 +388,14 @@ func main() {
 	http.HandleFunc("/uploadUsage", uploadUsageHandler)
 	http.HandleFunc("/aggregate", aggregate.AggregateHandler)
 	http.HandleFunc("/productName", productNameHandler)
-	http.HandleFunc("/uploadInventory", uploadInventoryHandler)
+	http.HandleFunc("/uploadInventory", inventory.UploadInventoryHandler)
 
-	// --- MA2編集用API 追加 ---
+	// MA2一覧取得（GET /api/ma2）
 	http.HandleFunc("/api/ma2", listMa2Handler)
-	http.HandleFunc("/api/ma2/upsert", upsertMa2Handler)
+
+	// MA2登録／更新（POST /api/ma2/upsert）
+	http.HandleFunc("/api/ma2/upsert", ma2.UpsertHandler)
+
 	http.HandleFunc("/api/tani", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		json.NewEncoder(w).Encode(usage.GetTaniMap())
