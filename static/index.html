@@ -71,24 +71,13 @@
   <!-- デバッグ用表示 -->
   <pre id="debug" style="background:#f0f0f0; padding:0.5em; margin:1em 0;"></pre>
 
-  <!-- MA2編集用グリッド -->
-  <div class="ma2-editor" style="display:none;">
-    <div class="ma2-grid header">
-      <div>JANコード</div>
-      <div>YJコード</div>
-      <div>商品名</div>
-      <div>包装形態</div>
-      <div>包装単位</div>
-      <div>包装総量</div>
-      <div>JAN包装数量</div>
-      <div>JAN包装数量単位</div>
-      <div>JAN包装総量</div>
-      <div>操作</div>
+<!-- MA2編集エリア（初期は非表示） -->
+<div class="ma2-editor" style="display:none;">
+    <div class="ma2-grid body"></div>
     </div>
-    <div class="ma2-grid body">
-      <!-- ma2.js が <div class="row">…を追加 -->
-    </div>
-  </div>
+
+
+
 
   <!-- スクリプト読み込み順 -->
   <script src="/static/js/common.js"></script>

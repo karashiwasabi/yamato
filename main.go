@@ -388,7 +388,7 @@ func main() {
 	http.HandleFunc("/uploadUsage", uploadUsageHandler)
 	http.HandleFunc("/aggregate", aggregate.AggregateHandler)
 	http.HandleFunc("/productName", productNameHandler)
-	http.HandleFunc("/uploadInventory", inventory.UploadInventoryHandler)
+	http.HandleFunc("/uploadInventory", uploadInventoryHandler)
 
 	// MA2一覧取得（GET /api/ma2）
 	http.HandleFunc("/api/ma2", listMa2Handler)
