@@ -19,6 +19,7 @@ import (
 
 	"YAMATO/aggregate"
 	"YAMATO/dat"
+	"YAMATO/inout"
 	"YAMATO/inventory"
 	"YAMATO/jcshms"
 	"YAMATO/ma0"
@@ -28,6 +29,23 @@ import (
 
 	_ "github.com/mattn/go-sqlite3"
 )
+
+func autoLaunchBrowser(url string) {
+	var cmd string
+	var args []string
+	switch runtime.GOOS {
+	case "windows":
+		cmd = "cmd"
+		args = []string{"/c", "start", url}
+	case "darwin":
+		cmd = "open"
+		args = []string{url}
+	default:
+		cmd = "xdg-open"
+		args = []string{url}
+	}
+	exec.Command(cmd, args...).Start()
+}
 
 // loadCSV は Shift-JIS エンコードの CSV を指定テーブルにロードするユーティリティ
 func loadCSV(db *sql.DB, filePath, table string, cols int, skipHeader bool) error {
@@ -177,26 +195,6 @@ func uploadUsageHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
-}
-
-// autoLaunchBrowser は起動時にデフォルトブラウザでアプリを開く
-func autoLaunchBrowser(url string) {
-	var cmd string
-	var args []string
-	switch runtime.GOOS {
-	case "windows":
-		cmd = "cmd"
-		args = []string{"/c", "start", url}
-	case "darwin":
-		cmd = "open"
-		args = []string{url}
-	default:
-		cmd = "xdg-open"
-		args = []string{url}
-	}
-	if err := exec.Command(cmd, args...).Start(); err != nil {
-		log.Printf("browser start failed: %v", err)
-	}
 }
 
 // uploadInventoryHandler は棚卸 CSV を受け取り、inventory テーブルに UPSERT
@@ -355,6 +353,7 @@ func main() {
 
 	// global DB をセット
 	ma0.DB = db
+	inout.DB = db
 
 	// TANI マップを先にロードしておく
 	usage.LoadTaniMap()
@@ -389,6 +388,7 @@ func main() {
 	http.HandleFunc("/aggregate", aggregate.AggregateHandler)
 	http.HandleFunc("/productName", productNameHandler)
 	http.HandleFunc("/uploadInventory", uploadInventoryHandler)
+	http.HandleFunc("/api/inout", inout.Handler)
 
 	// MA2一覧取得（GET /api/ma2）
 	http.HandleFunc("/api/ma2", listMa2Handler)
@@ -406,4 +406,5 @@ func main() {
 
 	log.Println("Server listening on :8080")
 	log.Fatal(http.ListenAndServe(":8080", nil))
+
 }

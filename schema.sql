@@ -396,15 +396,27 @@ CREATE TABLE IF NOT EXISTS ma2 (
  );
 
 
--- =========================================
--- シーケンス管理用テーブル追加
--- =========================================
+-- ======================================================
+-- ② シーケンス管理テーブル定義（１回だけ実行）
+-- ======================================================
 CREATE TABLE IF NOT EXISTS code_sequences (
-  name    TEXT    PRIMARY KEY,  -- 'MA1Y','MA2Y','MA2J'
-  last_no INTEGER NOT NULL      -- 最終発番番号
+  name    TEXT    PRIMARY KEY,   -- 'MA1Y','MA1J','MA2Y','MA2J','INOUT' など
+  last_no INTEGER NOT NULL       -- 最終発番番号
 );
 
--- 初期レコード（すでに存在する場合は無視）
 INSERT OR IGNORE INTO code_sequences(name, last_no) VALUES
-  ('MA2Y', 0),
-  ('MA2J', 0);
+  ('MA1Y',  0),
+  ('MA1J',  0),
+  ('MA2Y',  0),
+  ('MA2J',  0),
+  ('INOUT', 0);
+
+-- ======================================================
+-- ③ inout テーブル定義
+-- ======================================================
+CREATE TABLE IF NOT EXISTS inout (
+  inoutcode   TEXT    PRIMARY KEY,  -- 自動採番コード (例: 'INOUT00001')
+  name        TEXT    NOT NULL,     -- 入力された名称
+  oroshicode  TEXT    NOT NULL      -- 卸コード
+);
+

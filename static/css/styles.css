@@ -185,3 +185,9 @@ tr:nth-child(even) td {
 }
 
 
+/* ---- ここから追加 ---- */
+.hidden {
+  display: none !important;
+}
+/* ---- ここまで ---- */
+
