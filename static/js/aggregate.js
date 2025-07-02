@@ -8,6 +8,26 @@ document.addEventListener("DOMContentLoaded", () => {
   const thead        = table.querySelector("thead");
   const tbody        = table.querySelector("tbody");
 
+  // ── デフォルト日付を設定 ──
+  const fromInput = formFilter.querySelector('input[name="from"]');
+  const toInput   = formFilter.querySelector('input[name="to"]');
+  (function setDefaultDates() {
+    const today       = new Date();
+    const endOfMonth  = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+    const fourMonths  = new Date(today);
+    fourMonths.setMonth(today.getMonth() - 4);
+
+    function fmt(d) {
+      const y  = d.getFullYear();
+      const m  = ('0' + (d.getMonth() + 1)).slice(-2);
+      const dd = ('0' + d.getDate()).slice(-2);
+      return `${y}-${m}-${dd}`;
+    }
+
+    fromInput.value = fmt(fourMonths);
+    toInput.value   = fmt(endOfMonth);
+  })();
+
   // 初期化
   thead.innerHTML = "";
   tbody.innerHTML = "";
@@ -25,14 +45,14 @@ document.addEventListener("DOMContentLoaded", () => {
     tbody.innerHTML         = "";
   });
 
-  // フィルタ実行
+  // フィルタ実行...
   formFilter.addEventListener("submit", async e => {
+    /* 以下、既存の submit 処理 */
     e.preventDefault();
     thead.innerHTML = "";
     tbody.innerHTML = "";
-
-    const from = formFilter.querySelector('input[name="from"]').value;
-    const to   = formFilter.querySelector('input[name="to"]').value;
+    const from   = fromInput.value;
+    const to     = toInput.value;
     if (!from || !to) {
       alert("開始日と終了日を指定してください");
       return;
