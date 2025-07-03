@@ -340,27 +340,24 @@ func listMa2Handler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-
-	mime.AddExtensionType(".js", "application/javascript")
+	// Register MIME types for static files
 	mime.AddExtensionType(".css", "text/css")
+	mime.AddExtensionType(".js", "application/javascript")
 
-	// SQLite DB を開く
+	// Open SQLite database
 	db, err := sql.Open("sqlite3", "yamato.db")
 	if err != nil {
 		log.Fatalf("DB open error: %v", err)
 	}
 	defer db.Close()
 
-	// global DB をセット
+	// Provide DB to other packages
 	ma0.DB = db
 	inout.DB = db
-
-	// TANI マップを先にロードしておく
+	aggregate.SetDB(db)
 	usage.LoadTaniMap()
 
-	aggregate.SetDB(db)
-
-	// スキーマ読み込み
+	// Apply schema.sql
 	schema, err := os.ReadFile("schema.sql")
 	if err != nil {
 		log.Fatalf("read schema.sql error: %v", err)
@@ -369,7 +366,7 @@ func main() {
 		log.Fatalf("exec schema.sql error: %v", err)
 	}
 
-	// マスター CSV をロード
+	// Load master CSVs
 	if err := loadCSV(db, "SOU/JCSHMS.CSV", "jcshms", 125, false); err != nil {
 		log.Fatalf("load JCSHMS failed: %v", err)
 	}
@@ -377,34 +374,36 @@ func main() {
 		log.Fatalf("load JANCODE failed: %v", err)
 	}
 
-	// 静的ファイル配信
-	staticFS := http.FileServer(http.Dir("./static"))
-	http.Handle("/static/", http.StripPrefix("/static/", staticFS))
-	http.Handle("/", staticFS)
+	// Static file server
+	fs := http.FileServer(http.Dir("./static"))
+	http.Handle("/", fs)
+	http.Handle("/static/", http.StripPrefix("/static/", fs))
+	http.HandleFunc("/api/productName", productNameHandler)
 
-	// API エンドポイント
+	// API endpoints
 	http.HandleFunc("/uploadDat", uploadDatHandler)
 	http.HandleFunc("/uploadUsage", uploadUsageHandler)
-	http.HandleFunc("/aggregate", aggregate.AggregateHandler)
-	http.HandleFunc("/productName", productNameHandler)
 	http.HandleFunc("/uploadInventory", uploadInventoryHandler)
+	http.HandleFunc("/aggregate", aggregate.AggregateHandler)
+
+	// Inout (出庫・入庫)
 	http.HandleFunc("/api/inout", inout.Handler)
+	http.HandleFunc("/api/inout/search", inout.ProductSearchHandler)
+	http.HandleFunc("/api/inout/save", inout.SaveIODHandler)
 
-	// MA2一覧取得（GET /api/ma2）
+	// MA2 endpoints
 	http.HandleFunc("/api/ma2", listMa2Handler)
-
-	// MA2登録／更新（POST /api/ma2/upsert）
 	http.HandleFunc("/api/ma2/upsert", ma2.UpsertHandler)
 
+	// TANI map endpoint
 	http.HandleFunc("/api/tani", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		json.NewEncoder(w).Encode(usage.GetTaniMap())
 	})
 
-	// 自動ブラウザ起動
+	// Auto-open browser
 	go autoLaunchBrowser("http://localhost:8080")
 
 	log.Println("Server listening on :8080")
 	log.Fatal(http.ListenAndServe(":8080", nil))
-
 }

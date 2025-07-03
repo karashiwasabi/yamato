@@ -1,185 +1,258 @@
 // File: static/js/inout.js
 
 document.addEventListener("DOMContentLoaded", () => {
-  // Form & modal elements
-  const inoutBtn      = document.getElementById("inoutBtn");
-  const inoutForm     = document.getElementById("inoutForm");
-  const existingNames = document.getElementById("existingNames");
-  const newNameInput  = document.getElementById("newName");
-  const oroshiInput   = document.getElementById("oroshiCode");
-  const addClientBtn  = document.getElementById("addClientBtn");
-
-  const inoutTable    = document.getElementById("inoutTable");
-  const modal         = document.getElementById("drugModal");
-  const closeBtn      = document.getElementById("drugModalClose");
-  const searchName    = document.getElementById("searchName");
-  const searchSpec    = document.getElementById("searchSpec");
-  const searchBtn     = document.getElementById("searchBtn");
-  const resultsTbody  = document.querySelector("#searchResults tbody");
-
-  // Summary & tax cells
-  const subtotalCell = document.getElementById("subtotal");
-  const totalTaxCell = document.getElementById("totalTax");
+  const MAX_ROWS       = 10;
+  const inoutBtn       = document.getElementById("inoutBtn");
+  const inoutForm      = document.getElementById("inoutForm");
+  const existingNames  = document.getElementById("existingNames");
+  const newNameInput   = document.getElementById("newName");
+  const oroshiInput    = document.getElementById("oroshiCode");
+  const addClientBtn   = document.getElementById("addClientBtn");
+  const clearFormBtn   = document.getElementById("clearFormBtn");
+  const submitBtn      = document.getElementById("submitInoutBtn");
+  const dateInput      = document.getElementById("inoutDate");
+  const slipInput      = document.getElementById("inoutSlipNo");
+  const body           = document.getElementById("inoutBody");
+  const taxRateInput   = document.getElementById("taxRate");
+  const subtotalCell   = document.getElementById("subtotal");
+  const totalTaxCell   = document.getElementById("totalTax");
   const grandTotalCell = document.getElementById("grandTotal");
-  const taxRateInput = document.getElementById("taxRate");
+
+  const modal          = document.getElementById("drugModal");
+  const closeModalBtn  = document.getElementById("drugModalClose");
+  const searchName     = document.getElementById("searchName");
+  const searchSpec     = document.getElementById("searchSpec");
+  const searchBtn      = document.getElementById("searchBtn");
+  const resultsTbody   = document.querySelector("#searchResults tbody");
 
   let currentRow = null;
-  const taniMap = {};
+  let taniMap    = {};
 
-  // Load unit reverse map
+  // 外側フォームの submit を止める
+  inoutForm.addEventListener("submit", e => e.preventDefault());
+
+  // モーダル内の Enter で親フォーム送信を阻止
+  [searchName, searchSpec].forEach(el => {
+    el.addEventListener("keydown", e => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        searchBtn.click();
+      }
+    });
+  });
+
+  // 単位マップ取得
   fetch("/api/tani")
-    .then(r => r.json())
-    .then(m => Object.assign(taniMap, m))
+    .then(res => res.json())
+    .then(m => taniMap = m)
     .catch(console.error);
 
-  // Load existing clients
-  async function loadNames() {
-    existingNames.innerHTML = `<option value="">──選択──</option>`;
-    try {
-      const res = await fetch("/api/inout");
-      const list = await res.json();
-      list.forEach(r => {
-        const o = document.createElement("option");
-        o.value = r.name; o.textContent = r.name;
-        existingNames.appendChild(o);
-      });
-    } catch(e) { console.error(e); }
+  // 得意先一覧ロード
+  async function loadClients() {
+    existingNames.innerHTML = `<option value="">── 選択 ──</option>`;
+    const list = await (await fetch("/api/inout")).json();
+    list.forEach(r => {
+      const o = document.createElement("option");
+      o.value = r.name; o.textContent = r.name;
+      existingNames.appendChild(o);
+    });
   }
 
-  // Register client
-  addClientBtn.addEventListener("click", async () => {
-    const name = newNameInput.value.trim() || existingNames.value;
-    if(!name) return alert("得意先を入力または選択してください");
-    try {
-      const res = await fetch("/api/inout", {
-        method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({name,oroshicode:oroshiInput.value.trim()})
+  // 明細行初期化
+  function initRows() {
+    body.innerHTML = "";
+    for (let i = 1; i <= MAX_ROWS; i++) {
+      const tr = document.createElement("tr");
+      tr.dataset.line = i;
+      tr.innerHTML = `
+        <td>${i}</td>
+        <td class="yj-code"></td>
+        <td><input class="jan" type="text"></td>
+        <td class="item-name" style="cursor:pointer;">（商品名クリック）</td>
+        <td><input class="packaging" readonly></td>
+        <td><input class="qty" type="number" min="0"></td>
+        <td class="amount">0</td>
+        <td class="tax-amount">0</td>
+        <td><input class="expiryDate" type="date"></td>
+        <td><input class="lotNumber" type="text"></td>
+      `;
+
+      // 商品名クリックで検索モーダル
+      tr.querySelector(".item-name").addEventListener("click", () => {
+        currentRow = tr;
+        resultsTbody.innerHTML = "";
+        searchName.value = "";
+        searchSpec.value = "";
+        modal.classList.remove("hidden");
       });
-      if(!res.ok) throw new Error(await res.text());
-      alert("登録完了");
-      newNameInput.value=""; oroshiInput.value="";
-      existingNames.value="";
-      await loadNames();
-    } catch(e) {
-      console.error(e); alert("登録失敗："+e.message);
+
+      // 数量・期限入力で再計算
+      tr.querySelector(".qty").addEventListener("input", recalcAll);
+      tr.querySelector(".expiryDate").addEventListener("change", recalcAll);
+
+      body.appendChild(tr);
     }
-  });
+  }
 
-  // Toggle form
-  inoutBtn.addEventListener("click", () => {
-    inoutForm.classList.toggle("hidden");
-    if(!inoutForm.classList.contains("hidden")) {
-      loadNames(); recalcAll();
-    }
-  });
-
-  // Show modal on product-name click
-  inoutTable.addEventListener("click", e => {
-    const td = e.target.closest("td.item-name");
-    if(!td) return;
-    currentRow = td.closest("tr");
-    resultsTbody.innerHTML="";
-    searchName.value=""; searchSpec.value="";
-    modal.classList.remove("hidden");
-    searchName.focus();
-  });
-
-  closeBtn.addEventListener("click", () => modal.classList.add("hidden"));
-
-  // Search & render modal rows
-  searchBtn.addEventListener("click", async () => {
-    const n = encodeURIComponent(searchName.value.trim());
-    const s = encodeURIComponent(searchSpec.value.trim());
-    try {
-      const res = await fetch(`/api/inout/search?name=${n}&spec=${s}`);
-      if(!res.ok) throw new Error(res.statusText);
-      const list = await res.json();
-      resultsTbody.innerHTML = "";
-
-      list.forEach(item => {
-        const baseY = item.unitYaku/(item.packTotal/item.coef);
-        const code  = item.packQtyUnitCode;
-        const num   = item.packQtyNumber;
-        const jc39  = item.unitName;
-        const mapped = taniMap[code];
-        const suffix = code===0?"":`/${mapped||jc39}`;
-        const pkgText = `${num}${jc39}${suffix}`;
-
-        const tr = document.createElement("tr");
-        tr.innerHTML = `
-          <td>${item.yj}</td>
-          <td>${item.jan}</td>
-          <td>${item.name}</td>
-          <td>${item.spec}</td>
-          <td>${pkgText}</td>
-          <td>${baseY.toFixed(3)}</td>
-        `;
-        tr.dataset.baseY = baseY;
-        tr.dataset.num   = num;
-        tr.dataset.code  = code;
-        tr.dataset.unit  = jc39;
-
-        tr.addEventListener("click", () => {
-          currentRow.querySelector(".yj-code").textContent   = item.yj;
-          currentRow.querySelector(".jan").value             = item.jan;
-          currentRow.querySelector(".item-name").textContent = item.name;
-          currentRow.querySelector(".packaging").value       = pkgText;
-          currentRow.dataset.baseY = baseY;
-          currentRow.dataset.num   = num;
-          currentRow.dataset.code  = code;
-          currentRow.dataset.unit  = jc39;
-          modal.classList.add("hidden");
-          recalcAll();
-        });
-
-        resultsTbody.appendChild(tr);
-      });
-    } catch(e) {
-      console.error(e); alert("検索失敗："+e.message);
-    }
-  });
-
-  // Recalculate line-item rounding then tax
+  // 再計算ロジック
   function recalcAll() {
-    const rate = parseFloat(taxRateInput.value)||0;
-    let sumAmt=0, sumTax=0;
+    const rate = parseFloat(taxRateInput.value) || 0;
+    let sumNet = 0, sumTax = 0;
 
-    inoutTable.querySelectorAll("tbody tr").forEach(row=>{
-      if(["subtotalRow","taxRow"].includes(row.id)) return;
-      const qty  = parseInt(row.querySelector(".qty").value,10)||0;
-      const base = parseFloat(row.dataset.baseY)||0;
-      const num  = parseFloat(row.dataset.num)||0;
-      const code = +row.dataset.code;
+    body.querySelectorAll("tr").forEach(row => {
+      const qtyIn   = parseFloat(row.querySelector(".qty").value) || 0;
+      const janQty  = parseFloat(row.dataset.num)   || 0;
+      const baseY   = parseFloat(row.dataset.baseY) || 0;
+      const realQty = janQty * qtyIn;
+      const net     = Math.round(baseY * realQty);
+      const tax     = Math.round(net * rate / 100);
 
-      // raw net
-      const rawNet = code===0
-        ? base*qty
-        : base*num*qty;
-      // rounded net
-      const net = Math.round(rawNet);
-      row.querySelector(".amount").textContent = net;
-
-      // line tax
-      const tax = Math.round(net*rate/100);
+      row.querySelector(".amount").textContent     = net;
       row.querySelector(".tax-amount").textContent = tax;
-
-      sumAmt += net;
+      sumNet += net;
       sumTax += tax;
     });
 
-    // subtotal & total
-    subtotalCell.textContent = sumAmt;
+    subtotalCell.textContent = sumNet;
     totalTaxCell.textContent = sumTax;
-    grandTotalCell.textContent = sumAmt + sumTax;
+    grandTotalCell.textContent = sumNet + sumTax;
   }
 
-  // Listen inputs
-  inoutTable.addEventListener("input", e => {
-    if(e.target.classList.contains("qty")) recalcAll();
-  });
-  taxRateInput.addEventListener("input", recalcAll);
 
-  // initial
+
+  // 得意先登録
+  addClientBtn.addEventListener("click", async () => {
+    const name = newNameInput.value.trim() || existingNames.value;
+    if (!name) {
+      alert("得意先を入力または選択してください");
+      return;
+    }
+    await fetch("/api/inout", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ name, oroshicode: oroshiInput.value.trim() })
+    });
+    await loadClients();
+  });
+
+  // フォームクリア
+  clearFormBtn.addEventListener("click", () => {
+    [dateInput, slipInput, existingNames, newNameInput, oroshiInput]
+      .forEach(el => el.value = "");
+    body.querySelectorAll("input").forEach(i => i.value = "");
+    recalcAll();
+  });
+
+  // モーダル閉じる
+  closeModalBtn.addEventListener("click", () => modal.classList.add("hidden"));
+
+  // 薬品検索
+  searchBtn.addEventListener("click", async () => {
+    const name = encodeURIComponent(searchName.value.trim());
+    const spec = encodeURIComponent(searchSpec.value.trim());
+    const list = await (await fetch(`/api/inout/search?name=${name}&spec=${spec}`)).json();
+    resultsTbody.innerHTML = "";
+
+    list.forEach(item => {
+      const tr = document.createElement("tr");
+      const baseY = item.unitYaku / (item.packTotal / item.coef);
+      tr.dataset.baseY = baseY.toFixed(6);
+      tr.dataset.num   = item.packQtyNumber;
+      tr.dataset.code  = item.packQtyUnitCode;
+      tr.dataset.unit  = item.unitName;
+
+      const mapped = taniMap[item.packQtyUnitCode] || item.unitName;
+      const suffix = item.packQtyUnitCode === 0 ? "" : `/${mapped}`;
+      const pkgStr = `${item.packQtyNumber}${item.unitName}${suffix}`;
+
+      tr.innerHTML = `
+        <td>${item.yj}</td>
+        <td>${item.jan}</td>
+        <td>${item.name}</td>
+        <td>${item.spec}</td>
+        <td>${pkgStr}</td>
+        <td>${baseY.toFixed(3)}</td>
+      `;
+
+      tr.addEventListener("click", () => {
+        currentRow.querySelector(".yj-code").textContent   = item.yj;
+        currentRow.querySelector(".jan").value             = item.jan;
+        currentRow.querySelector(".item-name").textContent = item.name;
+        currentRow.querySelector(".packaging").value       = pkgStr;
+        currentRow.dataset.baseY = tr.dataset.baseY;
+        currentRow.dataset.num   = tr.dataset.num;
+        currentRow.dataset.code  = tr.dataset.code;
+        currentRow.dataset.unit  = tr.dataset.unit;
+        modal.classList.add("hidden");
+        recalcAll();
+      });
+
+      resultsTbody.appendChild(tr);
+    });
+  });
+
+  // 明細送信
+  submitBtn.addEventListener("click", async () => {
+    if (!dateInput.value || !slipInput.value) {
+      alert("日付と伝票番号を入力してください");
+      return;
+    }
+    const type = document.querySelector('input[name="inoutType"]:checked').value;
+    const payload = [];
+
+    const rawDate = dateInput.value;               // "2025-12-25"
+    const iodDate = rawDate.replace(/-/g, "");     // "20251225"
+
+    body.querySelectorAll("tr").forEach(row => {
+      const jan    = row.querySelector(".jan").value;
+      const qtyIn  = parseFloat(row.querySelector(".qty").value) || 0;
+      const janQty = parseFloat(row.dataset.num) || 0;
+      if (!jan || qtyIn === 0) return;
+
+      const realQty = janQty * qtyIn;
+      const baseY   = parseFloat(row.dataset.baseY) || 0;
+      const net     = Math.round(baseY * realQty);
+      const janUnit = taniMap[row.dataset.code] || row.dataset.unit;
+
+      payload.push({
+        iodJan:           jan,
+        iodDate:          iodDate,
+        iodType:          type,
+        iodJanQuantity:   janQty,
+        iodJanUnit:       janUnit,
+        iodQuantity:      realQty,
+        iodUnit:          row.dataset.unit,
+        iodPackaging:     row.querySelector(".packaging").value,
+        iodUnitPrice:     baseY,
+        iodSubtotal:      net,
+        iodExpiryDate:    row.querySelector(".expiryDate").value.replace(/-/g, ""),
+        iodLotNumber:     row.querySelector(".lotNumber").value,
+        iodOroshiCode:    oroshiInput.value.trim(),
+        iodReceiptNumber: slipInput.value.replace(/-/g, ""),
+        iodLineNumber:    parseInt(row.dataset.line, 10),
+      });
+    });
+
+    console.log("DEBUG payload:", payload);
+    await fetch("/api/inout/save", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(payload)
+    });
+    alert("保存しました");
+  });
+
+  // フォーム トグル
+  inoutBtn.addEventListener("click", async () => {
+    inoutForm.classList.toggle("hidden");
+    if (!inoutForm.classList.contains("hidden")) {
+      await loadClients();
+      initRows();
+      recalcAll();
+    }
+  });
+
+  // 初期化
+  initRows();
   recalcAll();
 });

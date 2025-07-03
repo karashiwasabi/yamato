@@ -88,160 +88,70 @@
 </style>
 
 <!-- 出庫・入庫フォーム -->
-<div id="inoutForm" class="hidden" style="margin:1em 0;">
-  <!-- 出庫／入庫ラジオはそのまま -->
+<form id="inoutForm" class="hidden" autocomplete="off" style="margin:1em 0;">
+
+
+  <!-- 出庫／入庫選択 -->
   <div class="row">
-    <label><input type="radio" name="inoutType" value="out" checked> 出庫</label>
-    <label><input type="radio" name="inoutType" value="in"> 入庫</label>
+    <label><input type="radio" name="inoutType" value="出庫" checked> 出庫</label>
+    <label><input type="radio" name="inoutType" value="入庫"> 入庫</label>
   </div>
 
-  <!-- 得意先選択部分 -->
+  <!-- 日付と伝票番号 -->
   <div class="row">
-    <label>
-      既存得意先:
-      <select id="existingNames"><option value="">── 選択 ──</option></select>
-    </label>
-    <label>
-      新規得意先:
-      <input type="text" id="newName" placeholder="例：A薬局">
-    </label>
-    <label>
-      卸コード(任意):
-      <input type="text" id="oroshiCode" placeholder="例：ORO001">
-    </label>
-    <button type="button" id="addClientBtn" class="btn">得意先だけ登録</button>
+    <label>日付: <input type="date" id="inoutDate"></label>
+    <label>伝票番号: <input type="text" id="inoutSlipNo" placeholder="例:20250703-001"></label>
   </div>
 
-<table id="inoutTable" border="1" cellpadding="4" style="width:100%; margin-top:1em;">
-  <thead>
-    <tr>
-      <th>行</th><th>YJ</th><th>JAN</th><th>商品名</th>
-      <th>包装</th><th>数量</th>
-      <th>金額<br>（税抜）</th>
-      <th>税額</th>
-    </tr>
-  </thead>
-  <tbody>
-    <!-- 明細10行 -->
-    <tr>
-      <td>1</td>
-      <td class="yj-code"></td>
-      <td><input class="jan" type="text"></td>
-      <td class="item-name" style="cursor:pointer;">（商品名クリック）</td>
-      <td><input class="packaging" readonly></td>
-      <td><input class="qty" type="number" min="0" placeholder="整数"></td>
-      <td class="amount">0</td>
-      <td class="tax-amount">0</td>
-    </tr>
-    <tr>
-      <td>2</td>
-      <td class="yj-code"></td>
-      <td><input class="jan" type="text"></td>
-      <td class="item-name" style="cursor:pointer;">（商品名クリック）</td>
-      <td><input class="packaging" readonly></td>
-      <td><input class="qty" type="number" min="0" placeholder="整数"></td>
-      <td class="amount">0</td>
-      <td class="tax-amount">0</td>
-    </tr>
-    <tr>
-      <td>3</td>
-      <td class="yj-code"></td>
-      <td><input class="jan" type="text"></td>
-      <td class="item-name" style="cursor:pointer;">（商品名クリック）</td>
-      <td><input class="packaging" readonly></td>
-      <td><input class="qty" type="number" min="0" placeholder="整数"></td>
-      <td class="amount">0</td>
-      <td class="tax-amount">0</td>
-    </tr>
-    <tr>
-      <td>4</td>
-      <td class="yj-code"></td>
-      <td><input class="jan" type="text"></td>
-      <td class="item-name" style="cursor:pointer;">（商品名クリック）</td>
-      <td><input class="packaging" readonly></td>
-      <td><input class="qty" type="number" min="0" placeholder="整数"></td>
-      <td class="amount">0</td>
-      <td class="tax-amount">0</td>
-    </tr>
-    <tr>
-      <td>5</td>
-      <td class="yj-code"></td>
-      <td><input class="jan" type="text"></td>
-      <td class="item-name" style="cursor:pointer;">（商品名クリック）</td>
-      <td><input class="packaging" readonly></td>
-      <td><input class="qty" type="number" min="0" placeholder="整数"></td>
-      <td class="amount">0</td>
-      <td class="tax-amount">0</td>
-    </tr>
-    <tr>
-      <td>6</td>
-      <td class="yj-code"></td>
-      <td><input class="jan" type="text"></td>
-      <td class="item-name" style="cursor:pointer;">（商品名クリック）</td>
-      <td><input class="packaging" readonly></td>
-      <td><input class="qty" type="number" min="0" placeholder="整数"></td>
-      <td class="amount">0</td>
-      <td class="tax-amount">0</td>
-    </tr>
-    <tr>
-      <td>7</td>
-      <td class="yj-code"></td>
-      <td><input class="jan" type="text"></td>
-      <td class="item-name" style="cursor:pointer;">（商品名クリック）</td>
-      <td><input class="packaging" readonly></td>
-      <td><input class="qty" type="number" min="0" placeholder="整数"></td>
-      <td class="amount">0</td>
-      <td class="tax-amount">0</td>
-    </tr>
-    <tr>
-      <td>8</td>
-      <td class="yj-code"></td>
-      <td><input class="jan" type="text"></td>
-      <td class="item-name" style="cursor:pointer;">（商品名クリック）</td>
-      <td><input class="packaging" readonly></td>
-      <td><input class="qty" type="number" min="0" placeholder="整数"></td>
-      <td class="amount">0</td>
-      <td class="tax-amount">0</td>
-    </tr>
-    <tr>
-      <td>9</td>
-      <td class="yj-code"></td>
-      <td><input class="jan" type="text"></td>
-      <td class="item-name" style="cursor:pointer;">（商品名クリック）</td>
-      <td><input class="packaging" readonly></td>
-      <td><input class="qty" type="number" min="0" placeholder="整数"></td>
-      <td class="amount">0</td>
-      <td class="tax-amount">0</td>
-    </tr>
-    <tr>
-      <td>10</td>
-      <td class="yj-code"></td>
-      <td><input class="jan" type="text"></td>
-      <td class="item-name" style="cursor:pointer;">（商品名クリック）</td>
-      <td><input class="packaging" readonly></td>
-      <td><input class="qty" type="number" min="0" placeholder="整数"></td>
-      <td class="amount">0</td>
-      <td class="tax-amount">0</td>
-    </tr>
-    <!-- 小計（税抜）行 -->
-    <tr id="subtotalRow">
-      <td colspan="6" style="text-align:right;">小計（税抜）</td>
-      <td id="subtotal">0</td>
-      <td id="totalTax">0</td>
-    </tr>
-    <!-- 税率行 -->
-    <tr id="taxRow">
-      <td colspan="6" style="text-align:right;">
-        消費税率 
-        <input id="taxRate" type="number" min="0" value="10" style="width:3em;">%
-      </td>
-      <td colspan="2" id="grandTotal">0</td>
-    </tr>
-  </tbody>
-</table>
+  <!-- 得意先 -->
+  <div class="row">
+    <label>既存得意先:
+      <select id="existingNames">
+        <option value="">── 選択 ──</option>
+      </select>
+    </label>
+    <label>新規得意先: <input type="text" id="newName" placeholder="例：A薬局"></label>
+    <label>卸コード: <input type="text" id="oroshiCode" placeholder="例：ORO001"></label>
+    <button id="addClientBtn" class="btn">得意先登録</button>
+  </div>
 
+  <!-- 明細テーブル -->
+  <table id="inoutTable" border="1" cellpadding="4" style="width:100%; margin-top:1em;">
+    <thead>
+      <tr>
+        <th>行</th><th>YJ</th><th>JAN</th><th>商品名</th>
+        <th>包装</th><th>数量</th><th>金額(税抜)</th><th>税額</th>
+        <th>期限</th><th>ロット</th>
+      </tr>
+    </thead>
+    <tbody id="inoutBody">
+      <!-- JS が初期10行を生成 -->
+    </tbody>
+    <tfoot>
+      <tr>
+        <td colspan="6" style="text-align:right;">小計</td>
+        <td id="subtotal">0</td><td id="totalTax">0</td><td colspan="2"></td>
+      </tr>
+      <tr>
+        <td colspan="6" style="text-align:right;">
+          消費税率
+          <input type="number" id="taxRate" min="0" value="10" style="width:3em;">%
+        </td>
+        <td colspan="4" id="grandTotal">0</td>
+      </tr>
+    </tfoot>
+  </table>
 
+  <!-- 操作ボタン -->
+  <div class="row" style="justify-content:flex-end; margin-top:1em;">
+    <button id="clearFormBtn" class="btn">クリア</button>
+    <button id="submitInoutBtn" class="btn">登録</button>
+  </div>
 </div>
+
+
+
+
 
 <!-- 検索モーダル -->
 <div id="drugModal" class="hidden"

@@ -1,3 +1,4 @@
+// File: YAMATO/inout/inout.go
 package inout
 
 import (
@@ -11,72 +12,83 @@ import (
 
 var DB *sql.DB
 
-// InoutRecord は得意先レコード
+// InoutRecord は得意先マスターを表します
 type InoutRecord struct {
 	InoutCode  string `json:"inoutcode"`
 	Name       string `json:"name"`
 	OroshiCode string `json:"oroshicode"`
 }
 
-// ProductRec は /api/inout/search の結果レコード
+// ProductRec は /api/inout/search の結果レコードです
 type ProductRec struct {
-	Jan             string  `json:"jan"`             // JC000JanCode
-	YJ              string  `json:"yj"`              // JC009YJCode
-	Name            string  `json:"name"`            // JC018ShouhinMei
-	Spec            string  `json:"spec"`            // JC020KikakuYouryou
-	PackCount       float64 `json:"packCount"`       // JC038HousouTaniSuuchi
-	PackTotal       float64 `json:"packTotal"`       // JC044HousouSouryouSuuchi
-	Coef            float64 `json:"coef"`            // JC048HousouYakkaKeisuu
-	UnitYaku        float64 `json:"unitYaku"`        // JC049GenTaniYakka
-	PackagingUnit   string  `json:"unitName"`        // JC039HousouTaniTani
-	PackQtyNumber   float64 `json:"packQtyNumber"`   // JA006HousouSuuryouSuuchi
-	PackQtyUnitCode int     `json:"packQtyUnitCode"` // JA007HousouSuuryouTaniCode
+	YJ              string  `json:"yj"`
+	Jan             string  `json:"jan"`
+	Name            string  `json:"name"`
+	Spec            string  `json:"spec"`
+	PackQtyNumber   float64 `json:"packQtyNumber"`
+	PackQtyUnitCode int     `json:"packQtyUnitCode"`
+	PackTotal       float64 `json:"packTotal"`
+	Coef            float64 `json:"coef"`
+	UnitName        string  `json:"unitName"`
+	UnitYaku        float64 `json:"unitYaku"`
 }
 
-func init() {
-	http.HandleFunc("/api/inout/search", productSearchHandler)
+// IODRecord は出庫・入庫明細DTOです
+type IODRecord struct {
+	IodJan           string  `json:"iodJan"`
+	IodDate          string  `json:"iodDate"`
+	IodType          string  `json:"iodType"`
+	IodJanQuantity   float64 `json:"iodJanQuantity"`
+	IodJanUnit       string  `json:"iodJanUnit"`
+	IodQuantity      float64 `json:"iodQuantity"`
+	IodUnit          string  `json:"iodUnit"`
+	IodPackaging     string  `json:"iodPackaging"`
+	IodUnitPrice     float64 `json:"iodUnitPrice"`
+	IodSubtotal      float64 `json:"iodSubtotal"`
+	IodExpiryDate    string  `json:"iodExpiryDate"`
+	IodLotNumber     string  `json:"iodLotNumber"`
+	IodOroshiCode    string  `json:"iodOroshiCode"`
+	IodReceiptNumber string  `json:"iodReceiptNumber"`
+	IodLineNumber    int     `json:"iodLineNumber"`
 }
 
-// Handler は /api/inout の GET/POST を処理
+// Handler は /api/inout の GET/POST を処理します
 func Handler(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		listInout(w)
+		listClients(w)
 	case http.MethodPost:
-		saveInout(w, r)
+		saveClient(w, r)
 	default:
 		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
 	}
 }
 
-// listInout は inout テーブル全件を JSON 返却
-func listInout(w http.ResponseWriter) {
-	rows, err := DB.Query(`
-    SELECT inoutcode, name, oroshicode
-      FROM inout
-     ORDER BY inoutcode
-  `)
+// listClients は得意先一覧を返却します
+func listClients(w http.ResponseWriter) {
+	rows, err := DB.Query(`SELECT inoutcode, name, oroshicode FROM inout ORDER BY inoutcode`)
 	if err != nil {
-		log.Printf("[inout] list error: %v", err)
-		http.Error(w, "DB Error", http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	defer rows.Close()
 
-	var list []InoutRecord
+	var out []InoutRecord
 	for rows.Next() {
 		var rec InoutRecord
 		if err := rows.Scan(&rec.InoutCode, &rec.Name, &rec.OroshiCode); err != nil {
-			log.Printf("[inout] scan error: %v", err)
+			log.Println("inout scan error:", err)
 			continue
 		}
-		list = append(list, rec)
+		out = append(out, rec)
 	}
-	writeJSON(w, list)
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	json.NewEncoder(w).Encode(out)
 }
 
-// saveInout は新規得意先を登録して返却
-func saveInout(w http.ResponseWriter, r *http.Request) {
+// saveClient は POST で送られてきた得意先を inout テーブルに登録します
+func saveClient(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Name       string `json:"name"`
 		OroshiCode string `json:"oroshicode"`
@@ -85,52 +97,56 @@ func saveInout(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Bad Request", http.StatusBadRequest)
 		return
 	}
+
+	// シーケンス発行
 	seq, err := ma0.NextSequence(DB, "INOUT")
 	if err != nil {
-		log.Printf("[inout] seq error: %v", err)
+		log.Println("INOUT sequence error:", err)
 		http.Error(w, "Sequence Error", http.StatusInternalServerError)
 		return
 	}
+
+	// inout テーブルに挿入
 	if _, err := DB.Exec(
-		`INSERT INTO inout(inoutcode, name, oroshicode) VALUES(?, ?, ?)`,
+		`INSERT INTO inout(inoutcode, name, oroshicode) VALUES(?,?,?)`,
 		seq, req.Name, req.OroshiCode,
 	); err != nil {
-		log.Printf("[inout] insert error: %v", err)
+		log.Println("inout insert error:", err)
 		http.Error(w, "Insert Error", http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, InoutRecord{InoutCode: seq, Name: req.Name, OroshiCode: req.OroshiCode})
+
+	w.WriteHeader(http.StatusNoContent)
 }
 
-// productSearchHandler は薬品検索＋包装情報を返す
-func productSearchHandler(w http.ResponseWriter, r *http.Request) {
+// ProductSearchHandler は /api/inout/search の GET リクエストを処理します。
+func ProductSearchHandler(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	name := "%" + q.Get("name") + "%"
 	spec := "%" + q.Get("spec") + "%"
 
 	rows, err := DB.Query(`
-    SELECT
-      j.JC000JanCode,
-      j.JC009YJCode,
-      j.JC018ShouhinMei,
-      j.JC020KikakuYouryou,
-      j.JC038HousouTaniSuuchi,
-      j.JC044HousouSouryouSuuchi,
-      j.JC048HousouYakkaKeisuu,
-      j.JC049GenTaniYakka,
-      j.JC039HousouTaniTani,
-      m2.JA006HousouSuuryouSuuchi   AS packQtyNumber,
-      m2.JA007HousouSuuryouTaniCode AS packQtyUnitCode
-    FROM jcshms AS j
+SELECT
+  j.JC009YJCode,
+  j.JC000JanCode,
+  j.JC018ShouhinMei,
+  j.JC020KikakuYouryou AS spec,
+  m2.JA006HousouSuuryouSuuchi   AS packQtyNumber,
+  m2.JA007HousouSuuryouTaniCode AS packQtyUnitCode,
+  j.JC044HousouSouryouSuuchi     AS packTotal,
+  COALESCE(NULLIF(j.JC048HousouYakkaKeisuu, ''), '0') AS coef,
+  j.JC039HousouTaniTani          AS unitName,
+  j.JC049GenTaniYakka            AS unitYaku
+FROM jcshms AS j
 LEFT JOIN jancode AS m2
-      ON j.JC000JanCode = m2.JA001JanCode
-   WHERE j.JC018ShouhinMei LIKE ?
-     AND j.JC020KikakuYouryou LIKE ?
-   LIMIT 100
-  `, name, spec)
+  ON j.JC000JanCode = m2.JA001JanCode
+WHERE j.JC018ShouhinMei LIKE ?
+  AND j.JC020KikakuYouryou LIKE ?
+LIMIT 100
+`, name, spec)
 	if err != nil {
-		log.Printf("[inout] search error: %v", err)
-		http.Error(w, "Search Error", http.StatusInternalServerError)
+		log.Printf("▶ ProductSearch SQL error: %v", err)
+		http.Error(w, "DB Query Error", http.StatusInternalServerError)
 		return
 	}
 	defer rows.Close()
@@ -139,19 +155,90 @@ LEFT JOIN jancode AS m2
 	for rows.Next() {
 		var p ProductRec
 		if err := rows.Scan(
-			&p.Jan, &p.YJ, &p.Name, &p.Spec,
-			&p.PackCount, &p.PackTotal, &p.Coef, &p.UnitYaku, &p.PackagingUnit,
-			&p.PackQtyNumber, &p.PackQtyUnitCode,
+			&p.YJ,
+			&p.Jan,
+			&p.Name,
+			&p.Spec,
+			&p.PackQtyNumber,
+			&p.PackQtyUnitCode,
+			&p.PackTotal,
+			&p.Coef,
+			&p.UnitName,
+			&p.UnitYaku,
 		); err != nil {
-			log.Printf("[inout] scan error: %v", err)
+			log.Printf("▶ ProductSearch scan error: %v", err)
 			continue
 		}
 		out = append(out, p)
 	}
-	writeJSON(w, out)
+
+	if err := rows.Err(); err != nil {
+		log.Printf("▶ ProductSearch rows error: %v", err)
+		http.Error(w, "DB Rows Error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	json.NewEncoder(w).Encode(out)
 }
 
-func writeJSON(w http.ResponseWriter, v interface{}) {
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	json.NewEncoder(w).Encode(v)
+// SaveIODHandler は /api/inout/save で明細を受け取り DB に登録します
+func SaveIODHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var recs []IODRecord
+	if err := json.NewDecoder(r.Body).Decode(&recs); err != nil {
+		http.Error(w, "Bad Request", http.StatusBadRequest)
+		return
+	}
+	log.Printf("SaveIOD payload: %+v\n", recs)
+
+	tx, err := DB.Begin()
+	if err != nil {
+		http.Error(w, "DB Error", http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback()
+
+	stmt, err := tx.Prepare(`
+    INSERT OR REPLACE INTO iod (
+      iodJan, iodDate, iodType,
+      iodJanQuantity, iodJanUnit,
+      iodQuantity, iodUnit,
+      iodPackaging, iodUnitPrice, iodSubtotal,
+      iodExpiryDate, iodLotNumber,
+      iodOroshiCode, iodReceiptNumber, iodLineNumber
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `)
+	if err != nil {
+		http.Error(w, "Prepare Error", http.StatusInternalServerError)
+		return
+	}
+	defer stmt.Close()
+
+	for _, v := range recs {
+		if v.IodJan == "" || v.IodQuantity == 0 {
+			continue
+		}
+		if _, err := stmt.Exec(
+			v.IodJan, v.IodDate, v.IodType,
+			v.IodJanQuantity, v.IodJanUnit,
+			v.IodQuantity, v.IodUnit,
+			v.IodPackaging, v.IodUnitPrice, v.IodSubtotal,
+			v.IodExpiryDate, v.IodLotNumber,
+			v.IodOroshiCode, v.IodReceiptNumber, v.IodLineNumber,
+		); err != nil {
+			log.Println("iod insert error:", err)
+			continue
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		http.Error(w, "Commit Error", http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

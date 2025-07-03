@@ -420,3 +420,24 @@ CREATE TABLE IF NOT EXISTS inout (
   oroshicode  TEXT    NOT NULL      -- 卸コード
 );
 
+CREATE TABLE IF NOT EXISTS iod (
+  iodJan            TEXT    NOT NULL,
+  iodDate           TEXT    NOT NULL,
+  iodType           TEXT    NOT NULL,
+  iodJanQuantity    REAL    NOT NULL,
+  iodJanUnit        TEXT    NOT NULL,
+  iodQuantity       REAL    NOT NULL,
+  iodUnit           TEXT    NOT NULL,
+  iodPackaging      TEXT    NOT NULL,
+  iodUnitPrice      REAL    NOT NULL,
+  iodSubtotal       REAL    NOT NULL,
+  iodExpiryDate     TEXT,
+  iodLotNumber      TEXT,
+  iodOroshiCode     TEXT,
+  iodReceiptNumber  TEXT    NOT NULL,
+  iodLineNumber     INTEGER NOT NULL,
+  PRIMARY KEY(iodReceiptNumber, iodLineNumber)
+);
+
+
+
