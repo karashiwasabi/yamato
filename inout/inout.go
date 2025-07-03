@@ -126,24 +126,28 @@ func ProductSearchHandler(w http.ResponseWriter, r *http.Request) {
 	spec := "%" + q.Get("spec") + "%"
 
 	rows, err := DB.Query(`
-SELECT
-  j.JC009YJCode,
-  j.JC000JanCode,
-  j.JC018ShouhinMei,
-  j.JC020KikakuYouryou AS spec,
-  m2.JA006HousouSuuryouSuuchi   AS packQtyNumber,
-  m2.JA007HousouSuuryouTaniCode AS packQtyUnitCode,
-  j.JC044HousouSouryouSuuchi     AS packTotal,
-  COALESCE(NULLIF(j.JC048HousouYakkaKeisuu, ''), '0') AS coef,
-  j.JC039HousouTaniTani          AS unitName,
-  j.JC049GenTaniYakka            AS unitYaku
-FROM jcshms AS j
-LEFT JOIN jancode AS m2
-  ON j.JC000JanCode = m2.JA001JanCode
-WHERE j.JC018ShouhinMei LIKE ?
-  AND j.JC020KikakuYouryou LIKE ?
-LIMIT 100
-`, name, spec)
+      SELECT
+        j.JC009YJCode,
+        j.JC000JanCode,
+        j.JC018ShouhinMei,
+        j.JC020KikakuYouryou AS spec,
+        m2.JA006HousouSuuryouSuuchi   AS packQtyNumber,
+        m2.JA007HousouSuuryouTaniCode AS packQtyUnitCode,
+        j.JC044HousouSouryouSuuchi    AS packTotal,
+        COALESCE(NULLIF(j.JC048HousouYakkaKeisuu, ''), '0') AS coef,
+        j.JC039HousouTaniTani         AS unitName,
+        COALESCE(NULLIF(j.JC049GenTaniYakka, ''), '0') AS unitYaku
+      FROM jcshms AS j
+      LEFT JOIN jancode AS m2
+        ON j.JC000JanCode = m2.JA001JanCode
+      WHERE (
+          j.JC018ShouhinMei           LIKE ?   -- 商品名
+       OR j.JC022ShouhinMeiKanaSortYou LIKE ?   -- かなソート用商品名
+      )
+        AND j.JC020KikakuYouryou LIKE ?        -- 規格
+      LIMIT 100
+    `, name, name, spec) // ← name を2回渡すのを忘れずに
+
 	if err != nil {
 		log.Printf("▶ ProductSearch SQL error: %v", err)
 		http.Error(w, "DB Query Error", http.StatusInternalServerError)
