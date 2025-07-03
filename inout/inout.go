@@ -37,7 +37,7 @@ type ProductRec struct {
 type IODRecord struct {
 	IodJan           string  `json:"iodJan"`
 	IodDate          string  `json:"iodDate"`
-	IodType          string  `json:"iodType"`
+	IodType          int     `json:"iodType"`
 	IodJanQuantity   float64 `json:"iodJanQuantity"`
 	IodJanUnit       string  `json:"iodJanUnit"`
 	IodQuantity      float64 `json:"iodQuantity"`

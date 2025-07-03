@@ -121,19 +121,37 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
   // 得意先登録
+   // --- 変更後 ---
   addClientBtn.addEventListener("click", async () => {
+    // 1) 得意先名取得
     const name = newNameInput.value.trim() || existingNames.value;
     if (!name) {
-      alert("得意先を入力または選択してください");
-      return;
+      return alert("得意先を入力または選択してください");
     }
-    await fetch("/api/inout", {
-      method: "POST",
-      headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({ name, oroshicode: oroshiInput.value.trim() })
+
+    // 2) サーバーへ登録リクエスト
+    const res = await fetch("/api/inout", {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({
+        name,
+        oroshicode: oroshiInput.value.trim()
+      })
     });
+
+    // 3) 成否アラート
+    if (!res.ok) {
+      return alert("得意先登録に失敗しました");
+    }
+    alert("得意先を登録しました");
+
+    // 4) フィールドクリア＋一覧再ロード
+    newNameInput.value = "";
+    oroshiInput.value  = "";
     await loadClients();
   });
+
+
 
   // フォームクリア
   clearFormBtn.addEventListener("click", () => {
@@ -191,56 +209,84 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
-  // 明細送信
-  submitBtn.addEventListener("click", async () => {
-    if (!dateInput.value || !slipInput.value) {
-      alert("日付と伝票番号を入力してください");
-      return;
-    }
-    const type = document.querySelector('input[name="inoutType"]:checked').value;
-    const payload = [];
+submitBtn.addEventListener("click", async () => {
+  // 1) 日付＆伝票番号の必須チェック
+  if (!dateInput.value || !slipInput.value) {
+    alert("日付と伝票番号を入力してください");
+    return;
+  }
 
-    const rawDate = dateInput.value;               // "2025-12-25"
-    const iodDate = rawDate.replace(/-/g, "");     // "20251225"
+  // 2) 出庫／入庫タイプを数値コードに変換（出庫→3、入庫→4）
+  const rawType  = document.querySelector('input[name="inoutType"]:checked').value;
+  const typeCode = rawType === "出庫" ? 3 : 4;
 
-    body.querySelectorAll("tr").forEach(row => {
-      const jan    = row.querySelector(".jan").value;
-      const qtyIn  = parseFloat(row.querySelector(".qty").value) || 0;
-      const janQty = parseFloat(row.dataset.num) || 0;
-      if (!jan || qtyIn === 0) return;
+  // 3) 伝票番号からハイフンを除去
+  const slipNo = slipInput.value.trim().replace(/-/g, "");
 
-      const realQty = janQty * qtyIn;
-      const baseY   = parseFloat(row.dataset.baseY) || 0;
-      const net     = Math.round(baseY * realQty);
-      const janUnit = taniMap[row.dataset.code] || row.dataset.unit;
+  // 4) 日付を YYYYMMDD 形式に変換
+  const iodDate = dateInput.value.replace(/-/g, "");
 
-      payload.push({
-        iodJan:           jan,
-        iodDate:          iodDate,
-        iodType:          type,
-        iodJanQuantity:   janQty,
-        iodJanUnit:       janUnit,
-        iodQuantity:      realQty,
-        iodUnit:          row.dataset.unit,
-        iodPackaging:     row.querySelector(".packaging").value,
-        iodUnitPrice:     baseY,
-        iodSubtotal:      net,
-        iodExpiryDate:    row.querySelector(".expiryDate").value.replace(/-/g, ""),
-        iodLotNumber:     row.querySelector(".lotNumber").value,
-        iodOroshiCode:    oroshiInput.value.trim(),
-        iodReceiptNumber: slipInput.value.replace(/-/g, ""),
-        iodLineNumber:    parseInt(row.dataset.line, 10),
-      });
+  // 5) 明細ごとに DTO を組み立て
+  const payload = [];
+  body.querySelectorAll("tr").forEach(row => {
+    const jan     = row.querySelector(".jan").value.trim();
+    const qtyIn   = parseFloat(row.querySelector(".qty").value) || 0;
+    if (!jan || qtyIn === 0) return;  // JAN が空 or 数量０ はスキップ
+
+    // data 属性から取り出す
+    const janQty     = parseFloat(row.dataset.num)   || 0;   // １パックあたりのJAN数量
+    const baseY      = parseFloat(row.dataset.baseY) || 0;   // 薬価（税抜）
+    const unitCode   = row.dataset.code    || "";            // 包装単位コード or 名称
+    const unitName   = row.dataset.unit    || "";            // 包装単位名称
+    const packaging  = row.querySelector(".packaging").value.trim();
+    const rawExp     = row.querySelector(".expiryDate").value;
+    const expDate    = rawExp ? rawExp.replace(/-/g, "") : "";
+    const lotNo      = row.querySelector(".lotNumber").value.trim();
+
+    // 実 JAN 数量／金額計算
+    const realQty = janQty * qtyIn;
+    const netAmt  = Math.round(baseY * realQty);   // 税抜金額
+
+    payload.push({
+      iodJan:           jan,          // JANコード
+      iodDate:          iodDate,      // 登録日
+      iodType:          typeCode,     // 出庫(3)/入庫(4)
+      iodJanQuantity:   qtyIn,        // 入力パック数
+      iodJanUnit:       unitCode,     // 包装単位コード or 名称
+      iodQuantity:      realQty,      // 実JAN数量
+      iodUnit:          unitName,     // 包装単位名称
+      iodPackaging:     packaging,    // パッケージ文字列
+      iodUnitPrice:     baseY,        // １JANあたり薬価(税抜)
+      iodSubtotal:      netAmt,       // 小計(税抜)
+      iodExpiryDate:    expDate,      // 有効期限(YYYYMMDD)
+      iodLotNumber:     lotNo,        // ロット番号
+      iodOroshiCode:    oroshiInput.value.trim(),  // 卸コード
+      iodReceiptNumber: slipNo,       // 伝票番号
+      iodLineNumber:    parseInt(row.dataset.line, 10) // 行番号
     });
-
-    console.log("DEBUG payload:", payload);
-    await fetch("/api/inout/save", {
-      method: "POST",
-      headers: {"Content-Type": "application/json"},
-      body: JSON.stringify(payload)
-    });
-    alert("保存しました");
   });
+
+  // 6) サーバーへ送信
+  try {
+    const res = await fetch("/api/inout/save", {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify(payload)
+    });
+    if (!res.ok) throw new Error(res.statusText);
+
+    alert("保存しました");
+    location.reload();
+
+  } catch (err) {
+    console.error(err);
+    alert("登録エラー: " + err.message);
+  }
+});
+
+
+
+
 
   // フォーム トグル
   inoutBtn.addEventListener("click", async () => {
