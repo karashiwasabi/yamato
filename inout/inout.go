@@ -193,6 +193,7 @@ func SaveIODHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// リクエストボディをデコード
 	var recs []IODRecord
 	if err := json.NewDecoder(r.Body).Decode(&recs); err != nil {
 		http.Error(w, "Bad Request", http.StatusBadRequest)
@@ -207,16 +208,17 @@ func SaveIODHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback()
 
+	// 登録用ステートメント
 	stmt, err := tx.Prepare(`
-    INSERT OR REPLACE INTO iod (
-      iodJan, iodDate, iodType,
-      iodJanQuantity, iodJanUnit,
-      iodQuantity, iodUnit,
-      iodPackaging, iodUnitPrice, iodSubtotal,
-      iodExpiryDate, iodLotNumber,
-      iodOroshiCode, iodReceiptNumber, iodLineNumber
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `)
+        INSERT OR REPLACE INTO iod (
+          iodJan, iodDate, iodType,
+          iodJanQuantity, iodJanUnit,
+          iodQuantity, iodUnit,
+          iodPackaging, iodUnitPrice, iodSubtotal,
+          iodExpiryDate, iodLotNumber,
+          iodOroshiCode, iodReceiptNumber, iodLineNumber
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `)
 	if err != nil {
 		http.Error(w, "Prepare Error", http.StatusInternalServerError)
 		return
@@ -224,9 +226,21 @@ func SaveIODHandler(w http.ResponseWriter, r *http.Request) {
 	defer stmt.Close()
 
 	for _, v := range recs {
+		// JAN or 数量が空/0 のものはスキップ
 		if v.IodJan == "" || v.IodQuantity == 0 {
 			continue
 		}
+
+		// ← MA0 連携／MA2 登録ロジックを追加する箇所
+		maRec, created, err0 := ma0.CheckOrCreateMA0(v.IodJan)
+		if err0 != nil {
+			log.Printf("[IOD] MA0 lookup error JAN=%s: %v", v.IodJan, err0)
+		} else if created {
+			log.Printf("[IOD] MA0 record created JAN=%s → YJ=%s", v.IodJan, maRec.MA009JC009YJCode)
+		}
+		// ここまで
+
+		// 実際の iod テーブルへの登録
 		if _, err := stmt.Exec(
 			v.IodJan, v.IodDate, v.IodType,
 			v.IodJanQuantity, v.IodJanUnit,

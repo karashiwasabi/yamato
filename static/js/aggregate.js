@@ -77,18 +77,17 @@ document.addEventListener("DOMContentLoaded", () => {
     indicator.textContent = `集計中… (${from} ～ ${to})`;
 
     let data;
-    try {
-      const res = await fetch(`/aggregate?${params.toString()}`);
-      if (!res.ok) throw new Error(res.statusText);
-      data = await res.json();
-    } catch (err) {
-      indicator.textContent = `集計失敗: ${err.message}`;
-      return;
-    }
-    if (!data || !Object.keys(data).length) {
-      indicator.textContent = "該当データがありません";
-      return;
-    }
+const res = await fetch(`/aggregate?${params.toString()}`);
+const raw = await res.text();
+console.log("▼ raw response:", raw);  // ← ここが重要
+
+try {
+  data = JSON.parse(raw);
+} catch (err) {
+  console.error("JSON解析失敗:", err);
+  return;
+}
+
 
     // 描画: YJ → 包装分類キー → 明細
     Object.entries(data).forEach(([yj, {productName, groups}]) => {
