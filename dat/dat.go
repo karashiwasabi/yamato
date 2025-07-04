@@ -117,7 +117,8 @@ func ParseDATFile(
 		}
 
 		// MA0 連携／MA2 登録
-		ma0Rec, created, err0 := ma0.CheckOrCreateMA0(datJan)
+		ma0Rec, created, err0 := ma0.CheckOrCreateMA0(datJan, name)
+
 		if err0 != nil {
 			log.Printf("[DAT] MA0 lookup error JAN=%s: %v", datJan, err0)
 		}

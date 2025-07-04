@@ -21,7 +21,6 @@ import (
 	"YAMATO/dat"
 	"YAMATO/inout"
 	"YAMATO/inventory"
-	"YAMATO/jcshms"
 	"YAMATO/ma0"
 	"YAMATO/ma2"
 	"YAMATO/model"
@@ -151,152 +150,6 @@ func uploadDatHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resp)
 }
 
-// uploadUsageHandler は USAGE ファイルのアップロードを処理
-func uploadUsageHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	if err := r.ParseMultipartForm(10 << 20); err != nil {
-		http.Error(w, "Error parsing form: "+err.Error(), http.StatusBadRequest)
-		return
-	}
-	files := r.MultipartForm.File["usageFileInput[]"]
-	if len(files) == 0 {
-		http.Error(w, "No USAGE file uploaded", http.StatusBadRequest)
-		return
-	}
-
-	var allRecords []usage.UsageRecord
-	for _, fh := range files {
-		file, err := fh.Open()
-		if err != nil {
-			log.Printf("Error opening usage file %s: %v", fh.Filename, err)
-			continue
-		}
-		recs, err := usage.ParseUsageFile(file)
-		file.Close()
-		if err != nil {
-			log.Printf("Error parsing usage file %s: %v", fh.Filename, err)
-			continue
-		}
-		allRecords = append(allRecords, recs...)
-	}
-
-	if err := usage.ReplaceUsageRecordsWithPeriod(ma0.DB, allRecords); err != nil {
-		log.Printf("Failed to replace USAGE records: %v", err)
-		http.Error(w, "Failed to update USAGE records", http.StatusInternalServerError)
-		return
-	}
-
-	response := map[string]interface{}{
-		"TotalRecords": len(allRecords),
-		"USAGERecords": allRecords,
-	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
-}
-
-// uploadInventoryHandler は棚卸 CSV を受け取り、inventory テーブルに UPSERT
-// ———— JCSHMS に未登録の JAN だけ MA2 登録 ————
-func uploadInventoryHandler(w http.ResponseWriter, r *http.Request) {
-	// 1) POST チェック
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	// 2) multipart/form-data からファイル取得
-	file, _, err := r.FormFile("inventoryFile")
-	if err != nil {
-		http.Error(w, "ファイルが指定されていません", http.StatusBadRequest)
-		return
-	}
-	defer file.Close()
-
-	// 3) CSV → InventoryRecord スライス
-	recs, err := inventory.ParseInventoryCSV(file)
-	if err != nil {
-		http.Error(w, "CSV読み込みエラー: "+err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	// 4) 各レコード処理
-	for i := range recs {
-		rec := &recs[i]
-
-		// (A) MA0 に登録 or 取得
-		maRec, _, err := ma0.CheckOrCreateMA0(rec.InvJanCode)
-		if err != nil {
-			log.Printf("[INVENTORY] MA0 lookup/create error JAN=%s: %v", rec.InvJanCode, err)
-			continue
-		}
-
-		// (B) JCSHMS に存在するかチェック
-		cs, err := jcshms.QueryByJan(ma0.DB, rec.InvJanCode)
-		if err != nil {
-			log.Printf("[INVENTORY] JCShms lookup error JAN=%s: %v", rec.InvJanCode, err)
-		}
-
-		if len(cs) == 0 {
-			// → 未登録 JAN のみ MA2 登録
-			_, yjSeq, err := ma0.RegisterMA(ma0.DB, &ma0.MARecord{
-				JanCode:                rec.InvJanCode,
-				ProductName:            rec.InvProductName,
-				HousouKeitai:           "",
-				HousouTaniUnit:         rec.InvHousouTaniUnit,
-				HousouSouryouNumber:    0,
-				JanHousouSuuryouNumber: int(rec.InvJanHousouSuuryouNumber),
-				JanHousouSuuryouUnit:   rec.JanHousouSuuryouUnit,
-				JanHousouSouryouNumber: 0,
-			})
-			if err != nil {
-				log.Printf("[INVENTORY] MA2 registration error JAN=%s: %v", rec.InvJanCode, err)
-			} else {
-				rec.InvYjCode = yjSeq
-			}
-		} else {
-			// → 既存 JAN は ma0 から返ってきた YJ を使う
-			rec.InvYjCode = maRec.MA009JC009YJCode
-		}
-
-		// (C) inventory テーブルに UPSERT
-		prod := maRec.MA018JC018ShouhinMei
-		if prod == "" {
-			prod = rec.InvProductName
-		}
-		if _, err := ma0.DB.Exec(
-			`INSERT OR REPLACE INTO inventory
-         (invDate, invYjCode, invJanCode, invProductName,
-          invJanHousouSuuryouNumber, qty,
-          HousouTaniUnit, InvHousouTaniUnit,
-          janqty, JanHousouSuuryouUnit, InvJanHousouSuuryouUnit)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			rec.InvDate,
-			rec.InvYjCode,
-			rec.InvJanCode,
-			prod,
-			rec.InvJanHousouSuuryouNumber,
-			rec.Qty,
-			rec.HousouTaniUnit,
-			rec.InvHousouTaniUnit,
-			rec.JanQty,
-			rec.JanHousouSuuryouUnit,
-			rec.InvJanHousouSuuryouUnit,
-		); err != nil {
-			log.Printf("[INVENTORY] upsert error JAN=%s: %v", rec.InvJanCode, err)
-		}
-	}
-
-	// 5) 結果を JSON で返却
-	resp := map[string]interface{}{
-		"count":       len(recs),
-		"inventories": recs,
-	}
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	json.NewEncoder(w).Encode(resp)
-}
-
 // listMa2Handler は MA2全件を空配列保証で返却
 func listMa2Handler(w http.ResponseWriter, r *http.Request) {
 	type rec struct {
@@ -382,8 +235,9 @@ func main() {
 
 	// API endpoints
 	http.HandleFunc("/uploadDat", uploadDatHandler)
-	http.HandleFunc("/uploadUsage", uploadUsageHandler)
-	http.HandleFunc("/uploadInventory", uploadInventoryHandler)
+	http.HandleFunc("/uploadUsage", usage.UploadUsageHandler)
+
+	http.HandleFunc("/uploadInventory", inventory.UploadInventoryHandler)
 	http.HandleFunc("/aggregate", aggregate.AggregateHandler)
 
 	// Inout (出庫・入庫)

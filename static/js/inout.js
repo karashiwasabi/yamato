@@ -230,6 +230,7 @@ submitBtn.addEventListener("click", async () => {
   const payload = [];
   body.querySelectorAll("tr").forEach(row => {
     const jan     = row.querySelector(".jan").value.trim();
+    
     const qtyIn   = parseFloat(row.querySelector(".qty").value) || 0;
     if (!jan || qtyIn === 0) return;  // JAN が空 or 数量０ はスキップ
 
@@ -249,6 +250,7 @@ submitBtn.addEventListener("click", async () => {
 
     payload.push({
       iodJan:           jan,          // JANコード
+      iodProductName:   row.querySelector(".item-name").textContent,  // 追加
       iodDate:          iodDate,      // 登録日
       iodType:          typeCode,     // 出庫(3)/入庫(4)
       iodJanQuantity:   qtyIn,        // 入力パック数

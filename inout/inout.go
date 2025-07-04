@@ -35,7 +35,9 @@ type ProductRec struct {
 
 // IODRecord は出庫・入庫明細DTOです
 type IODRecord struct {
-	IodJan           string  `json:"iodJan"`
+	IodJan         string `json:"iodJan"`
+	IodProductName string `json:"iodProductName"` // ← 追加
+
 	IodDate          string  `json:"iodDate"`
 	IodType          int     `json:"iodType"`
 	IodJanQuantity   float64 `json:"iodJanQuantity"`
@@ -232,7 +234,7 @@ func SaveIODHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// ← MA0 連携／MA2 登録ロジックを追加する箇所
-		maRec, created, err0 := ma0.CheckOrCreateMA0(v.IodJan)
+		maRec, created, err0 := ma0.CheckOrCreateMA0(v.IodJan, v.IodProductName)
 		if err0 != nil {
 			log.Printf("[IOD] MA0 lookup error JAN=%s: %v", v.IodJan, err0)
 		} else if created {

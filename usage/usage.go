@@ -4,9 +4,11 @@ package usage
 import (
 	"bufio"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
+	"net/http"
 	"os"
 	"strconv"
 	"strings"
@@ -121,7 +123,7 @@ func ParseUsageFile(r io.Reader) ([]UsageRecord, error) {
 		ur.OrganizedFlag = getOrganizedFlag(ur.UsageJanCode)
 
 		// MA0 連携／MA2 登録
-		ma0Rec, created, err0 := ma0.CheckOrCreateMA0(ur.UsageJanCode)
+		ma0Rec, created, err0 := ma0.CheckOrCreateMA0(ur.UsageJanCode, ur.UsageProductName)
 		if err0 != nil {
 			log.Printf("[USAGE] MA0 lookup error JAN=%s: %v", ur.UsageJanCode, err0)
 		}
@@ -205,4 +207,52 @@ func ReplaceUsageRecordsWithPeriod(db *sql.DB, recs []UsageRecord) error {
 func GetTaniMap() map[string]string {
 	loadTaniMap()
 	return taniMap
+}
+
+// UploadUsageHandler は USAGE CSV アップロードを処理します。
+func UploadUsageHandler(w http.ResponseWriter, r *http.Request) {
+	log.Println("[UploadUsageHandler] start")
+
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if err := r.ParseMultipartForm(10 << 20); err != nil {
+		http.Error(w, "Error parsing form: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	files := r.MultipartForm.File["usageFileInput[]"]
+	if len(files) == 0 {
+		http.Error(w, "No USAGE file uploaded", http.StatusBadRequest)
+		return
+	}
+
+	var allRecords []UsageRecord
+	for _, fh := range files {
+		file, err := fh.Open()
+		if err != nil {
+			log.Printf("[UploadUsageHandler] open error: %v", err)
+			continue
+		}
+		recs, err := ParseUsageFile(file)
+		file.Close()
+		if err != nil {
+			log.Printf("[UploadUsageHandler] parse error: %v", err)
+			continue
+		}
+		allRecords = append(allRecords, recs...)
+	}
+
+	if err := ReplaceUsageRecordsWithPeriod(ma0.DB, allRecords); err != nil {
+		log.Printf("[UploadUsageHandler] replace error: %v", err)
+		http.Error(w, "Failed to update USAGE records", http.StatusInternalServerError)
+		return
+	}
+
+	resp := map[string]interface{}{
+		"TotalRecords": len(allRecords),
+		"USAGERecords": allRecords,
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	json.NewEncoder(w).Encode(resp)
 }

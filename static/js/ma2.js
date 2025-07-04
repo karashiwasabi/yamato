@@ -34,13 +34,18 @@
       if (def.type === "select") {
         el = document.createElement("select");
         el.innerHTML = `<option value=""></option>`;
-        Object.entries(taniMap).forEach(([code, name]) => {
-          const o = document.createElement("option");
-          o.value = code;
-          o.textContent = name;
-          if (value === code) o.selected = true;
-          el.appendChild(o);
-        });
+// 空キー・空名称は飛ばす
+Object.entries(taniMap)
+  .filter(([code,name]) => code.trim() !== "" && name.trim() !== "")
+  .forEach(([code, name]) => {
+    const o = document.createElement("option");
+    o.value = code;
+    o.textContent = name;
+    if (value === code) o.selected = true;
+    el.appendChild(o);
+});
+
+
       } else {
         el = document.createElement("input");
         el.type = def.type;

@@ -18,52 +18,55 @@ type MARecord struct {
 	JanHousouSouryouNumber int    // JAN 包装総量
 }
 
-// RegisterMA は MA0 マスターにヒットしなかったレコードを MA2 に登録します。
-// JanCode が空でなければそれを MA2JanCode に、常にシーケンスで MA2YjCode を発行します。
-// 返り値として発番済みの janSeq, yjSeq を返却します。
+// YAMATO/ma0/service.go の RegisterMA をこんな風に書き換えます
 func RegisterMA(db *sql.DB, maRec *MARecord) (janSeq, yjSeq string, err error) {
-	// MA2JanCode を決定
+	// ① 既存レコードがあれば、そこで使われたYJを返す（JANは maRec.JanCode そのまま）
 	if maRec.JanCode != "" {
-		janSeq = maRec.JanCode
-	} else {
+		var existingYJ string
+		err := db.QueryRow(
+			"SELECT MA2YjCode FROM ma2 WHERE MA2JanCode = ?",
+			maRec.JanCode,
+		).Scan(&existingYJ)
+		if err == nil {
+			return maRec.JanCode, existingYJ, nil
+		} else if err != sql.ErrNoRows {
+			return "", "", fmt.Errorf("MA2 lookup error: %w", err)
+		}
+	}
+
+	// ② 新規ケース：JANが空ならシーケンス発番
+	if maRec.JanCode == "" {
 		seq, seqErr := NextSequence(db, "MA2J")
 		if seqErr != nil {
-			err = fmt.Errorf("failed to get MA2J sequence: %w", seqErr)
-			return
+			return "", "", fmt.Errorf("MA2J seq error: %w", seqErr)
 		}
 		janSeq = seq
+	} else {
+		janSeq = maRec.JanCode
 	}
 
-	// YJ は常にシーケンス発行
-	seqYJ, seqErr := NextSequence(db, "MA2Y")
+	// ③ YJは常にシーケンス発番（存在チェック済なので重複発番ナシ）
+	yjSeq, seqErr := NextSequence(db, "MA2Y")
 	if seqErr != nil {
-		err = fmt.Errorf("failed to get MA2Y sequence: %w", seqErr)
-		return
+		return "", "", fmt.Errorf("MA2Y seq error: %w", seqErr)
 	}
-	yjSeq = seqYJ
 
-	// INSERT OR IGNORE で重複をスキップ
+	// ④ INSERT OR IGNORE
 	_, execErr := db.Exec(
-		`INSERT OR IGNORE INTO ma2
-           (MA2JanCode, MA2YjCode, Shouhinmei, HousouKeitai,
-            HousouTaniUnit, HousouSouryouNumber,
-            JanHousouSuuryouNumber, JanHousouSuuryouUnit,
-            JanHousouSouryouNumber)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		janSeq,
-		yjSeq,
-		maRec.ProductName,
-		maRec.HousouKeitai,
-		maRec.HousouTaniUnit,
-		maRec.HousouSouryouNumber,
-		maRec.JanHousouSuuryouNumber,
-		maRec.JanHousouSuuryouUnit,
+		`INSERT OR IGNORE INTO ma2 
+           (MA2JanCode,MA2YjCode,Shouhinmei,HousouKeitai,
+            HousouTaniUnit,HousouSouryouNumber,
+            JanHousouSuuryouNumber,JanHousouSuuryouUnit,JanHousouSouryouNumber)
+         VALUES(?,?,?,?,?,?,?,?,?)`,
+		janSeq, yjSeq,
+		maRec.ProductName, maRec.HousouKeitai,
+		maRec.HousouTaniUnit, maRec.HousouSouryouNumber,
+		maRec.JanHousouSuuryouNumber, maRec.JanHousouSuuryouUnit,
 		maRec.JanHousouSouryouNumber,
 	)
 	if execErr != nil {
-		err = fmt.Errorf("failed to insert into ma2: %w", execErr)
-		return
+		return "", "", fmt.Errorf("MA2 insert error: %w", execErr)
 	}
 
-	return
+	return janSeq, yjSeq, nil
 }

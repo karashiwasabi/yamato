@@ -473,13 +473,26 @@ WHERE inv.invDate BETWEEN ? AND ?`)
 			&d.ProductName,
 			&d.Type,
 			&d.RawCount,
-			&d.Unit,
+			&d.Unit, // ここにコードが入っている
 			&d.Quantity,
 			&d.HK, &d.HS, &d.HU, &d.JSN, &d.JSU, &d.JSSN,
 		); err != nil {
 			log.Printf("▶ INV Scan error: %v", err)
 			continue
 		}
+
+		// ↓↓↓ 追加 ↓↓↓
+		// コード→名称変換: Unit, HU, JSU
+		if nm := usage.GetTaniName(d.Unit); nm != "" {
+			d.Unit = nm
+		}
+		if nm := usage.GetTaniName(d.HU); nm != "" {
+			d.HU = nm
+		}
+		if nm := usage.GetTaniName(d.JSU); nm != "" {
+			d.JSU = nm
+		}
+		// ↑↑↑ 追加 ↑↑↑
 
 		// Count はパック数表示用
 		d.Count = ""
@@ -488,9 +501,7 @@ WHERE inv.invDate BETWEEN ? AND ?`)
 		d.PackagingKey = d.HK + d.JSN + d.HU
 		inner := d.JSN + d.HU + "×" + d.JSSN
 		if d.JSU != "" && d.JSU != "0" {
-			if nm := usage.GetTaniName(d.JSU); nm != "" {
-				inner += nm
-			}
+			inner += d.JSU
 		}
 		d.Packaging = d.HK + d.HS + d.HU + "(" + inner + ")"
 

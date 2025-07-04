@@ -4,7 +4,9 @@ package ma0
 import (
 	"database/sql"
 	"fmt"
+	"log"
 	"reflect"
+	"strconv"
 	"strings"
 
 	"YAMATO/jancode"
@@ -243,77 +245,128 @@ func InsertIgnore(db *sql.DB, recs []MA0Record) error {
 	return nil
 }
 
-// CheckOrCreateMA0 は、指定された JAN コードで ma0 テーブルを検索します。
-// 既存ならそのレコードを返し、created=false とします。
-// 見つからなければ、jcshms および jancode からマスター照会を行い、
-// 新規レコードを INSERT OR IGNORE して created=true として返します。
-func CheckOrCreateMA0(jan string) (MA0Record, bool, error) {
-	// 1) ma0 に既にレコードが存在するかチェック
+// CheckOrCreateMA0 looks up MA0 by JAN. If not found, it pulls
+// from JCShms/JANCode masters, inserts into MA0, then
+// ensures a YJ code exists by falling back to MA2 registration.
+// fallbackName is the original product name from Usage/DAT/Inventory.
+func CheckOrCreateMA0(jan, fallbackName string) (MA0Record, bool, error) {
+	// Prepare record and reflection helpers
 	var rec MA0Record
 	cols := columns()
 	addrs := make([]interface{}, len(cols))
-	recVal := reflect.ValueOf(&rec).Elem()
+	rv := reflect.ValueOf(&rec).Elem()
 	for i := range addrs {
-		addrs[i] = recVal.Field(i).Addr().Interface()
+		addrs[i] = rv.Field(i).Addr().Interface()
 	}
+
+	// 1) Try existing MA0
 	query := fmt.Sprintf("SELECT %s FROM ma0 WHERE MA000JC000JanCode = ?", strings.Join(cols, ","))
 	err := DB.QueryRow(query, jan).Scan(addrs...)
 	if err == nil {
-		// 既存レコードが見つかった場合
+		// Pull master data from JCSHMS if present
+		cs, _ := jcshms.QueryByJan(DB, jan)
+		if len(cs) == 0 {
+			// Case①: no JCSHMS record → use fallbackName
+			rec.MA018JC018ShouhinMei = fallbackName
+		} else {
+			// Case②: JCSHMS record exists → use its product name
+			rec.MA018JC018ShouhinMei = cs[0].JC018ShouhinMei
+			// And fill YJ if empty
+			if rec.MA009JC009YJCode == "" && cs[0].JC009YJCode != "" {
+				rec.MA009JC009YJCode = cs[0].JC009YJCode
+			}
+		}
+		// Finally, if still no YJ, fall back to MA2
+		if rec.MA009JC009YJCode == "" {
+			m2 := &MARecord{
+				JanCode:                rec.MA000JC000JanCode,
+				ProductName:            rec.MA018JC018ShouhinMei,
+				HousouKeitai:           rec.MA037JC037HousouKeitai,
+				HousouTaniUnit:         rec.MA039JC039HousouTaniTani,
+				HousouSouryouNumber:    atoi(rec.MA044JC044HousouSouryouSuuchi),
+				JanHousouSuuryouNumber: atoi(rec.MA131JA006HousouSuuryouSuuchi),
+				JanHousouSuuryouUnit:   rec.MA132JA007HousouSuuryouTaniCode,
+				JanHousouSouryouNumber: atoi(rec.MA133JA008HousouSouryouSuuchi),
+			}
+			_, newYJ, err2 := RegisterMA(DB, m2)
+			if err2 == nil {
+				rec.MA009JC009YJCode = newYJ
+				log.Printf("[CheckOrCreateMA0] existing→MA2 fallback JAN=%s → YJ=%s", jan, newYJ)
+			}
+		}
 		return rec, false, nil
 	}
 	if err != sql.ErrNoRows {
-		return MA0Record{}, false, fmt.Errorf("ma0 select error: %v", err)
+		return MA0Record{}, false, fmt.Errorf("ma0 select error: %w", err)
 	}
 
-	// 2) マスター照会（jcshms および jancode から）およびフィールドのコピー
+	// 2) New MA0 record: copy from masters
 	cs, _ := jcshms.QueryByJan(DB, jan)
 	ja, _ := jancode.QueryByJan(DB, jan)
-
-	// 両方のマスターにヒットがなければ、登録せずに終了する
-	if len(cs) == 0 && len(ja) == 0 {
-		return MA0Record{}, false, nil
-	}
-
-	// 反射を用いて、jcshms からの項目を MA0Record にコピー
+	rv = reflect.ValueOf(&rec).Elem()
+	// Copy JC fields
 	if len(cs) > 0 {
 		jcVal := reflect.ValueOf(cs[0])
-		for i := 0; i < recVal.NumField(); i++ {
-			field := recVal.Type().Field(i)
-			// MAレコードで "JC" を含むフィールドは、jcshms の対応フィールドへマッピング
-			if strings.HasPrefix(field.Name, "MA") && strings.Contains(field.Name, "JC") {
-				idx := strings.Index(field.Name, "JC")
-				masterName := field.Name[idx:]
-				if masterField := jcVal.FieldByName(masterName); masterField.IsValid() {
-					recVal.Field(i).SetString(masterField.String())
+		for i := 0; i < rv.NumField(); i++ {
+			f := rv.Type().Field(i)
+			if strings.Contains(f.Name, "JC") {
+				idx := strings.Index(f.Name, "JC")
+				if mf := jcVal.FieldByName(f.Name[idx:]); mf.IsValid() {
+					rv.Field(i).SetString(mf.String())
 				}
 			}
 		}
 	}
-
-	// jancode からも同様にコピー（フィールド名に "JA" を含むもの）
+	// Copy JA fields
 	if len(ja) > 0 {
 		jaVal := reflect.ValueOf(ja[0])
-		for i := 0; i < recVal.NumField(); i++ {
-			field := recVal.Type().Field(i)
-			if strings.HasPrefix(field.Name, "MA") && strings.Contains(field.Name, "JA") {
-				idx := strings.Index(field.Name, "JA")
-				masterName := field.Name[idx:]
-				if masterField := jaVal.FieldByName(masterName); masterField.IsValid() {
-					recVal.Field(i).SetString(masterField.String())
+		for i := 0; i < rv.NumField(); i++ {
+			f := rv.Type().Field(i)
+			if strings.Contains(f.Name, "JA") {
+				idx := strings.Index(f.Name, "JA")
+				if mf := jaVal.FieldByName(f.Name[idx:]); mf.IsValid() {
+					rv.Field(i).SetString(mf.String())
 				}
 			}
 		}
 	}
-
-	// 主キー（JANコード）の設定
 	rec.MA000JC000JanCode = jan
 
-	// 3) INSERT OR IGNORE により DB へ新規レコード挿入
-	if err := InsertIgnore(DB, []MA0Record{rec}); err != nil {
-		return MA0Record{}, false, fmt.Errorf("ma0 insert error: %v", err)
+	// If no master product name, use fallbackName
+	if rec.MA018JC018ShouhinMei == "" {
+		rec.MA018JC018ShouhinMei = fallbackName
 	}
+	// If still no YJ, fall back to MA2
+	if rec.MA009JC009YJCode == "" {
+		m2 := &MARecord{
+			JanCode:                rec.MA000JC000JanCode,
+			ProductName:            rec.MA018JC018ShouhinMei,
+			HousouKeitai:           rec.MA037JC037HousouKeitai,
+			HousouTaniUnit:         rec.MA039JC039HousouTaniTani,
+			HousouSouryouNumber:    atoi(rec.MA044JC044HousouSouryouSuuchi),
+			JanHousouSuuryouNumber: atoi(rec.MA131JA006HousouSuuryouSuuchi),
+			JanHousouSuuryouUnit:   rec.MA132JA007HousouSuuryouTaniCode,
+			JanHousouSouryouNumber: atoi(rec.MA133JA008HousouSouryouSuuchi),
+		}
+		_, newYJ, err2 := RegisterMA(DB, m2)
+		if err2 == nil {
+			rec.MA009JC009YJCode = newYJ
+			log.Printf("[CheckOrCreateMA0] new→MA2 created JAN=%s → YJ=%s", jan, newYJ)
+		}
+	}
+
+	// 3) Insert new MA0
+	if err := InsertIgnore(DB, []MA0Record{rec}); err != nil {
+		return MA0Record{}, true, fmt.Errorf("ma0 insert error: %w", err)
+	}
+
 	return rec, true, nil
+}
+
+// atoi is a helper to convert string→int, ignoring errors.
+func atoi(s string) int {
+	v, _ := strconv.Atoi(s)
+	return v
 }
 
 // InsertDATRecord は、与えられた model.DATRecord を datrecords テーブルに挿入します。
